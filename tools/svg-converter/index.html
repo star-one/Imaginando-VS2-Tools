@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SVG to VS2 Material converter</title>
+<meta name="description" content="Turn an SVG into a Material for VS2 (Visual Synthesizer): paste or upload an SVG, set the knobs, and download a plain and an audio-reactive .frag file. Everything runs in your browser.">
+<style>
+:root {
+  --bg: #fafafa; --panel: #ffffff; --ink: #1b1b22; --muted: #5a5a68; --line: #d4d4de;
+  --accent: #b0125f; --accent-ink: #ffffff; --focus: #0b57d0; --ok: #0a6b3a; --warn: #8a4b00; --bad: #a30f1f;
+  --code-bg: #f1f1f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111117; --panel: #1b1b24; --ink: #ececf3; --muted: #a6a6b6; --line: #34343f;
+    --accent: #ff5fa8; --accent-ink: #1a0510; --focus: #8ab4ff; --ok: #5fd68f; --warn: #ffbd5c; --bad: #ff7b88;
+    --code-bg: #14141b;
+  }
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header, main, footer { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 24px; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.15rem; margin: 0 0 12px; }
+p { margin: 0 0 10px; }
+.lead { color: var(--muted); max-width: 70ch; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 16px 0; }
+label { display: block; font-weight: 600; margin: 10px 0 4px; }
+.hint { color: var(--muted); font-weight: 400; font-size: 0.9rem; }
+input[type=text], input[type=number], select, textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit;
+}
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; min-height: 180px; }
+input[type=color] { width: 56px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+input[type=range] { width: 100%; }
+button, .btn {
+  font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer;
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:hover { filter: brightness(1.08); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.row > * { flex: 1 1 160px; }
+.row > .shrink { flex: 0 0 auto; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+@media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); margin-top: 10px; }
+.drop.over { border-color: var(--accent); color: var(--ink); }
+.status { min-height: 1.5em; font-size: 0.95rem; }
+.status.ok { color: var(--ok); } .status.warn { color: var(--warn); } .status.bad { color: var(--bad); }
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td input { max-width: 110px; }
+.preview { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(200px, 320px); gap: 16px; }
+@media (max-width: 760px) { .preview { grid-template-columns: 1fr; } }
+canvas { width: 100%; background: #0b0b10; border-radius: 8px; display: block; aspect-ratio: 16 / 9; }
+canvas.sq { aspect-ratio: 1 / 1; max-width: 240px; }
+.knob { margin: 6px 0; }
+.knob label { margin: 0; display: flex; justify-content: space-between; font-weight: 600; font-size: 0.9rem; }
+.knob output { font-weight: 400; color: var(--muted); }
+details { margin-top: 10px; }
+summary { cursor: pointer; font-weight: 600; }
+.check { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-weight: 400; }
+.check input { width: auto; }
+footer { color: var(--muted); font-size: 0.9rem; padding-bottom: 40px; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+
+/* ---- the shared look: dark, precise, a little club-night ---- */
+:root {
+  --bg: #09090c; --panel: #111116; --panel2: #17171f; --ink: #ececf3; --muted: #a3a3b8; --line: #2a2a37;
+  --accent: #b8a2ff; --accent2: #4fe3ff; --accent-ink: #09090c; --focus: #4fe3ff;
+  --ok: #6fe7ab; --warn: #ffc762; --bad: #ff8393; --code-bg: #0d0d12;
+  --grad: linear-gradient(90deg, #8f6bff, #4fe3ff);
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+html { color-scheme: dark; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+body {
+  font-family: var(--sans); color: var(--ink); line-height: 1.6; letter-spacing: 0.005em;
+  background:
+    radial-gradient(1100px 560px at 85% -8%, rgba(143, 107, 255, 0.16), transparent 62%),
+    radial-gradient(900px 520px at -8% 6%, rgba(79, 227, 255, 0.09), transparent 58%),
+    var(--bg);
+  background-attachment: fixed;
+}
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent2); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--bg); padding: 8px 12px; border-radius: 6px; z-index: 10; }
+.skip:focus { left: 8px; }
+
+/* site bar */
+.sitebar { max-width: 1100px; margin: 0 auto; padding: 18px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
+.brand { font-family: var(--mono); font-weight: 600; letter-spacing: 0.24em; font-size: 0.78rem; color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 12px; }
+.brand:hover { color: var(--ink); }
+.brand .glyph { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
+.brand .glyph i { display: block; width: 3px; background: var(--grad); border-radius: 1px; }
+.sitebar ul { list-style: none; display: flex; gap: 4px 24px; flex-wrap: wrap; margin: 0; padding: 0; }
+.sitebar a.nav { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); text-decoration: none; padding: 6px 0; border-bottom: 1px solid transparent; }
+.sitebar a.nav:hover, .sitebar a.nav[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent2); }
+
+/* type */
+.eyebrow { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent2); margin: 28px 0 6px; }
+h1 { font-size: clamp(2rem, 4.6vw, 3.2rem); font-weight: 300; line-height: 1.06; letter-spacing: -0.012em; margin: 6px 0 12px; }
+h1 strong { font-weight: 600; }
+h2 { font-family: var(--mono); font-size: 0.78rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent2); margin: 0 0 14px; }
+h3 { font-weight: 500; letter-spacing: 0.01em; }
+.lead { color: var(--muted); font-size: 1.05rem; max-width: 66ch; }
+.hint { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: #d9d2ff; }
+
+/* panels */
+main > section.panel, section[aria-labelledby] { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 18px 0; box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.9); }
+main > section.panel::before, section[aria-labelledby]::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--grad); opacity: 0.75; }
+.note { border-left: 3px solid var(--accent2); border-radius: 0 8px 8px 0; background: rgba(79, 227, 255, 0.06); padding: 10px 14px; margin: 14px 0; }
+
+/* controls */
+label { color: var(--ink); }
+input[type=text], input[type=number], select, textarea { background: var(--code-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; }
+input[type=text]:hover, input[type=number]:hover, select:hover, textarea:hover { border-color: #3a3a4c; }
+input[type=color] { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; }
+input[type=range], input[type=checkbox] { accent-color: #8f6bff; }
+button, .btn { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); padding: 9px 16px; cursor: pointer; text-decoration: none; display: inline-block; transition: border-color 0.15s, transform 0.15s, background 0.15s; }
+button:hover, .btn:hover { border-color: var(--accent); filter: none; color: var(--ink); transform: translateY(-1px); }
+button.primary, .btn.primary { background: var(--grad); color: var(--accent-ink); border-color: transparent; }
+button.primary:hover, .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.08); }
+button:disabled { opacity: 0.4; cursor: default; transform: none; }
+table { border-collapse: collapse; }
+th { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); }
+td { border-bottom: 1px solid #1d1d27; }
+tr:hover td { background: rgba(255, 255, 255, 0.02); }
+tr.tried td { background: rgba(143, 107, 255, 0.14); }
+.cand-wrap { border: 1px solid var(--line); border-radius: 10px; background: var(--code-bg); }
+.drop { border: 1.5px dashed #3a3a4c; border-radius: 12px; background: rgba(255, 255, 255, 0.015); }
+.drop.over { border-color: var(--accent2); background: rgba(79, 227, 255, 0.07); }
+canvas { background: #07070a; border: 1px solid var(--line); border-radius: 12px; }
+details { border-top: 1px solid var(--line); padding-top: 8px; }
+summary { color: var(--accent); }
+ul.warns { color: var(--warn); }
+
+/* footer */
+footer { max-width: 1100px; margin: 36px auto 0; padding: 22px 16px 48px; color: var(--muted); font-size: 0.92rem; position: relative; }
+footer::before { content: ""; position: absolute; inset: 0 16px auto 16px; height: 1px; background: var(--grad); opacity: 0.6; }
+footer .notes p { max-width: 90ch; }
+footer .personal { max-width: 90ch; border-top: 1px solid var(--line); margin-top: 18px; padding-top: 4px; color: #c4c4d4; }
+footer .personal p { margin: 14px 0 0; }
+
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the tool</a>
+<nav class="sitebar" aria-label="Site"><a class="brand" href="../../index.html"><span class="glyph" aria-hidden="true"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:9px"></i><i style="height:13px"></i></span> VS2 TOOLS</a><ul><li><a class="nav" href="../../index.html">Home</a></li><li><a class="nav" href="../../tools/svg-converter/index.html" aria-current="page">SVG converter</a></li><li><a class="nav" href="../../tools/shadertoy-converter/index.html">Shadertoy converter</a></li><li><a class="nav" href="https://github.com/star-one/Imaginando-VS2-Tools">GitHub</a></li></ul></nav>
+<header>
+  <p class="eyebrow">VS2 Tools / SVG to Material</p>
+  <h1>SVG to VS2 Material converter</h1>
+  <p class="lead">Turn a vector drawing into a Material for <strong>VS2 (Visual Synthesizer)</strong> by Imaginando. Paste or upload an SVG, choose how the Material should behave, and download a plain and an audio-reactive <code>.frag</code> file. Everything runs in your browser: your SVG is never uploaded anywhere.</p>
+</header>
+
+<main id="content">
+  <section aria-labelledby="h-input">
+    <h2 id="h-input">1. Your SVG</h2>
+    <label for="svgText">Paste SVG code here <span class="hint">(or upload a file below)</span></label>
+    <textarea id="svgText" spellcheck="false" placeholder="&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; viewBox=&quot;0 0 100 100&quot;&gt; ... &lt;/svg&gt;"></textarea>
+    <div class="row" style="margin-top:10px">
+      <div class="shrink">
+        <label for="fileInput" style="margin-top:0">Upload an .svg file</label>
+        <input id="fileInput" type="file" accept=".svg,image/svg+xml">
+      </div>
+      <div class="shrink">
+        <span class="hint" style="display:block;margin-bottom:4px">Or try an example</span>
+        <button type="button" class="ex" data-ex="star">Star</button>
+        <button type="button" class="ex" data-ex="heart">Heart</button>
+        <button type="button" class="ex" data-ex="ring">Ring with a hole</button>
+        <button type="button" class="ex" data-ex="bolt">Lightning (outline)</button>
+      </div>
+    </div>
+    <div id="drop" class="drop" tabindex="0">...or drag an .svg file onto this box</div>
+    <p id="stats" class="status" role="status" aria-live="polite"></p>
+  </section>
+
+  <section aria-labelledby="h-shape">
+    <h2 id="h-shape">2. How the shape is converted</h2>
+    <div class="row">
+      <div>
+        <label for="maxSeg">Maximum straight segments: <output id="maxSegOut">300</output></label>
+        <input id="maxSeg" class="setting" type="range" min="20" max="1000" step="10" value="300">
+        <p class="hint">The shape is simplified to fit. More segments are more faithful but slower on the GPU, because every pixel checks every segment. About 300 is comfortable on a laptop.</p>
+      </div>
+      <div>
+        <label for="fillMode">Which shapes can be filled</label>
+        <select id="fillMode" class="setting">
+          <option value="svg">Follow the SVG (shapes with a fill colour)</option>
+          <option value="all">Every closed shape</option>
+          <option value="none">None: outlines only</option>
+        </select>
+        <label class="check"><input id="flipY" class="setting" type="checkbox"> Flip upside down</label>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-mat">
+    <h2 id="h-mat">3. The Material</h2>
+    <div class="row">
+      <div><label for="mName">Name <span class="hint">(used for the file names)</span></label><input id="mName" class="setting" type="text" value="svg_shape" maxlength="100"></div>
+      <div><label for="mAuthor">Author</label><input id="mAuthor" class="setting" type="text" value="" maxlength="80" placeholder="Your name">
+        <label class="check"><input id="rememberAuthor" type="checkbox"> Remember my name on this device <span class="hint">(saves a cookie)</span></label></div>
+      <div class="shrink"><label for="mColour">Layer colour</label><input id="mColour" class="setting" type="color" value="#ffffff"></div>
+      <div class="shrink"><label for="mSpeed">Speed multiplier</label><input id="mSpeed" class="setting" type="number" min="0.1" max="100" step="0.1" value="8" style="width:110px"></div>
+    </div>
+    <p class="hint" id="fnHint" aria-live="polite"></p>
+    <p class="hint">The speed multiplier is <code>SPEED_SCALE</code> in the code: everything that moves runs at the VS2 Speed knob times this number. The project default is 8.</p>
+
+    <div class="row">
+      <div>
+        <label for="effect">Effect on knob 5</label>
+        <select id="effect" class="setting">
+          <option value="wobble">Wobble: the shape ripples like it is under water</option>
+          <option value="glitch">Glitch: slices of the shape jump sideways</option>
+          <option value="pulse">Pulse: the shape swells and shrinks</option>
+          <option value="trace">Trace: the outline draws itself on, over and over</option>
+        </select>
+      </div>
+      <div class="shrink"><label for="uuidP">Plain UUID</label><input id="uuidP" class="setting" type="text" style="width:300px" maxlength="40"></div>
+      <div class="shrink"><label for="uuidA">Audio UUID</label><input id="uuidA" class="setting" type="text" style="width:300px" maxlength="40"></div>
+      <div class="shrink"><button type="button" id="newUuid">New UUIDs</button></div>
+    </div>
+
+    <h3 style="margin:16px 0 6px;font-size:1rem">The seven knobs</h3>
+    <p class="hint">Each Material gets seven knobs in VS2. Set the range and the starting value of each one. The audio version swaps knob 5 for <code>react</code> (audio sensitivity), and keeps the effect amount as a constant.</p>
+    <table>
+      <thead><tr><th>Knob</th><th>Name</th><th>Lowest</th><th>Highest</th><th>Starting value</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td><code>zoom</code></td><td><input id="zoomMin" class="setting" type="number" step="0.05" value="0.1"></td><td><input id="zoomMax" class="setting" type="number" step="0.05" value="3"></td><td><input id="zoomDef" class="setting" type="number" step="0.05" value="0.8"></td><td>Size of the shape</td></tr>
+        <tr><td>2</td><td><code>angle</code></td><td>-180</td><td>180</td><td><input id="angleDef" class="setting" type="number" step="1" value="0"></td><td>Rotation in degrees</td></tr>
+        <tr><td>3</td><td><code>thickness</code></td><td><input id="thMin" class="setting" type="number" step="0.001" value="0.001"></td><td><input id="thMax" class="setting" type="number" step="0.001" value="0.03"></td><td><input id="thDef" class="setting" type="number" step="0.001" value="0.004"></td><td>Line thickness (in screen heights)</td></tr>
+        <tr><td>4</td><td><code>fill</code></td><td>0</td><td>1</td><td><input id="fillDef" class="setting" type="number" step="0.05" value="0.3"></td><td>How solid the filled shapes are</td></tr>
+        <tr><td>5</td><td><code id="effName">wobble</code></td><td>0</td><td>1</td><td><input id="effDef" class="setting" type="number" step="0.05" value="0.3"></td><td id="effBlurb">How strong the effect is</td></tr>
+        <tr><td>6</td><td><code>glow</code></td><td>0</td><td>1</td><td><input id="glowDef" class="setting" type="number" step="0.05" value="0.35"></td><td>Glow around the lines</td></tr>
+        <tr><td>7</td><td><code>rainbow</code></td><td>0</td><td>1</td><td><input id="rainbowDef" class="setting" type="number" step="0.05" value="1"></td><td>0 = Layer colour only; 1 = a colour gradient across the shape</td></tr>
+        <tr><td>5 (audio)</td><td><code>react</code></td><td>0</td><td><input id="reactMax" class="setting" type="number" step="0.5" value="4"></td><td><input id="reactDef" class="setting" type="number" step="0.1" value="2"></td><td>Audio sensitivity (audio version only)</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin:18px 0 6px;font-size:1rem">Audio reactions <span class="hint">(audio version only)</span></h3>
+    <p class="hint">Choose how bass, mids and highs change the picture. Each box is how strongly that band drives that setting: 0 does nothing, 1 is the standard amount, 2 is double, up to 3. A band can drive several settings, and a setting can follow several bands. The knob <code>react</code> then scales everything.</p>
+    <table id="reactTable">
+      <thead><tr><th>What changes</th><th>Bass</th><th>Mids</th><th>Highs</th><th>What the standard amount does</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p><button type="button" id="reactReset">Reset to the standard reactions</button> <button type="button" id="reactOff">Switch all reactions off</button></p>
+
+    <h3 style="margin:18px 0 6px;font-size:1rem">Audio frequency bands <span class="hint">(audio version only)</span></h3>
+    <p class="hint">The audio version listens to three bands of the sound. Give each band's lowest and highest frequency in Hz. VS2 does not say how frequencies are laid out across its FFT texture, so the last three boxes are an assumption you can correct: the frequency at the left edge of the texture, the frequency at the right edge, and whether the spacing between them is logarithmic or even. The defaults assume 20 Hz to 20,000 Hz, logarithmic. The README explains how to check this against your own copy of VS2.</p>
+    <div class="row">
+      <div><label for="bassLo">Bass from (Hz)</label><input id="bassLo" class="setting" type="number" min="1" step="1" value="40"></div>
+      <div><label for="bassHi">to (Hz)</label><input id="bassHi" class="setting" type="number" min="1" step="1" value="150"></div>
+      <div><label for="midLo">Mids from (Hz)</label><input id="midLo" class="setting" type="number" min="1" step="1" value="250"></div>
+      <div><label for="midHi">to (Hz)</label><input id="midHi" class="setting" type="number" min="1" step="1" value="2000"></div>
+      <div><label for="highLo">Highs from (Hz)</label><input id="highLo" class="setting" type="number" min="1" step="1" value="4000"></div>
+      <div><label for="highHi">to (Hz)</label><input id="highHi" class="setting" type="number" min="1" step="1" value="12000"></div>
+    </div>
+    <div class="row">
+      <div><label for="fftMin">Texture left edge (Hz)</label><input id="fftMin" class="setting" type="number" min="1" step="1" value="20"></div>
+      <div><label for="fftMax">Texture right edge (Hz)</label><input id="fftMax" class="setting" type="number" min="2" step="1" value="20000"></div>
+      <div><label for="fftScale">Spacing</label><select id="fftScale" class="setting"><option value="log">Logarithmic</option><option value="lin">Even (linear)</option></select></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-prev">
+    <h2 id="h-prev">4. Preview</h2>
+    <div class="preview">
+      <div>
+        <canvas id="gl" width="640" height="360" aria-label="Live preview of the Material"></canvas>
+        <p id="glMsg" class="status" role="status" aria-live="polite"></p>
+        <div class="row" style="align-items:center">
+          <div class="shrink"><button type="button" id="pvPlay">Pause</button></div>
+          <div class="shrink"><label class="check" style="margin:0"><input id="pvAudio" type="checkbox"> Preview the audio version, with simulated music</label></div>
+        </div>
+        <p class="hint">The preview runs the generated code in your browser. It is an approximation: VS2 may differ slightly, and the simulated music is only a rough drumbeat.</p>
+      </div>
+      <div>
+        <div id="pvKnobs"></div>
+        <p class="hint" style="margin-top:12px">Shape check (the converted geometry):</p>
+        <canvas id="shape" class="sq" width="240" height="240" aria-label="The converted shape"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-out">
+    <h2 id="h-out">5. Download</h2>
+    <div class="row">
+      <div class="shrink"><button type="button" id="dlPlain" class="primary">Download plain .frag</button></div>
+      <div class="shrink"><button type="button" id="dlAudio" class="primary">Download audio-reactive .frag</button></div>
+      <div class="shrink"><button type="button" id="cpPlain">Copy plain code</button></div>
+      <div class="shrink"><button type="button" id="cpAudio">Copy audio code</button></div>
+    </div>
+    <p id="outMsg" class="status" role="status" aria-live="polite"></p>
+    <details><summary>Show the plain code</summary><textarea id="outPlain" readonly spellcheck="false" aria-label="Generated plain code"></textarea></details>
+    <details><summary>Show the audio-reactive code</summary><textarea id="outAudio" readonly spellcheck="false" aria-label="Generated audio-reactive code"></textarea></details>
+    <p class="hint" style="margin-top:12px">In VS2, create a new shader Material in the Material Editor and paste the code in (or import the file, if your version of VS2 offers that). The comment block at the top of the file names the knobs. See the VS2 manual's Material Editor section for details.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="notes">
+  <p><strong>What converts well:</strong> paths (all commands, including curves and arcs), rectangles, circles, ellipses, lines, polylines and polygons, with transforms and groups. <strong>What does not:</strong> text (convert it to outlines first), gradients, filters, clipping and masks, images, and per-shape colours and stroke widths. Colour and line thickness come from the Material's knobs.</p>
+  <p>Not affiliated with Imaginando. The SVG you give this page stays on your device. The only thing this page can store is your author name, and only if you tick "Remember my name": it is saved as a cookie on your device and is never sent anywhere by this page.</p>
+  </div>
+  <div class="personal">
+   <p>
+        A personal project by Simon Gray. If you enjoy this, you might like some of my music on <a href="https://music.youtube.com/channel/UCrjMIoxnq99mDNAVFrSDAtQ?feature=share" title="The Winterval Conspiracy on YouTube Music">YouTube Music</a>, on <a href="https://open.spotify.com/artist/5CIBF9NCIxs4BwDytgXH8K" title="The Winterval Conspiracy on Spotify">Spotify</a>, on <a href="https://itunes.apple.com/gb/artist/the-winterval-conspiracy/915956596" title="The Winterval Conspiracy on Apple Music">Apple Music</a>, and on <a href="https://www.amazon.co.uk/The-Winterval-Conspiracy/e/B00OT38POW/" title="The Winterval Conspiracy on Amazon">Amazon</a>. I've also got videos on <a href="https://www.youtube.com/@wintervalconspiracy" title="Simon Gray and The Winterval Conspiracy on YouTube">YouTube</a>. If you like it enough to give me some money, you can do that via <a href="http://winterval.org.uk/" title="The Winterval Conspiracy on Bandcamp">Bandcamp</a>. Made with the help of Claude; source available on <a href="https://github.com/star-one/Imaginando-VS2-Tools" title="VS2 Tools on GitHub">GitHub</a>.
+   </p>
+  </div>
+</footer>
+
+<script>
+/* CORE-START */
+'use strict';
+
+const EFFECTS = {
+  wobble: { label: 'Wobble', blurb: 'How strongly the shape ripples' },
+  glitch: { label: 'Glitch', blurb: 'How many slices jump, and how far' },
+  pulse:  { label: 'Pulse',  blurb: 'How far the shape swells and shrinks' },
+  trace:  { label: 'Trace',  blurb: '0 draws the whole shape; 1 draws it on, over and over' }
+};
+
+// ---------- small maths helpers ----------
+function mmul(a, b) {
+  return [
+    a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
+    a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
+    a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]
+  ];
+}
+function mapply(m, x, y) { return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]]; }
+
+function parseTransform(str) {
+  let m = [1, 0, 0, 1, 0, 0];
+  if (!str) return m;
+  const re = /(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)/g;
+  let mt;
+  while ((mt = re.exec(str))) {
+    const n = mt[2].split(/[\s,]+/).filter(function (s) { return s.length; }).map(Number);
+    if (n.some(function (v) { return !isFinite(v); })) continue;
+    let t = [1, 0, 0, 1, 0, 0];
+    switch (mt[1]) {
+      case 'matrix': if (n.length === 6) t = n; break;
+      case 'translate': t = [1, 0, 0, 1, n[0] || 0, n[1] || 0]; break;
+      case 'scale': if (n.length) t = [n[0], 0, 0, n.length > 1 ? n[1] : n[0], 0, 0]; break;
+      case 'rotate': {
+        const a = (n[0] || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+        t = [c, s, -s, c, 0, 0];
+        if (n.length >= 3) t = mmul(mmul([1, 0, 0, 1, n[1], n[2]], t), [1, 0, 0, 1, -n[1], -n[2]]);
+        break;
+      }
+      case 'skewX': t = [1, 0, Math.tan((n[0] || 0) * Math.PI / 180), 1, 0, 0]; break;
+      case 'skewY': t = [1, Math.tan((n[0] || 0) * Math.PI / 180), 0, 1, 0, 0]; break;
+    }
+    m = mmul(m, t);
+  }
+  return m;
+}
+
+// ---------- style lookups ----------
+function styleProp(el, name) {
+  const st = el.getAttribute('style');
+  if (st) {
+    const m = new RegExp('(?:^|;)\\s*' + name + '\\s*:\\s*([^;]+)').exec(st);
+    if (m) return m[1].trim();
+  }
+  const a = el.getAttribute(name);
+  return a !== null ? a.trim() : null;
+}
+function inheritedProp(el, name) {
+  for (let e = el; e && e.nodeType === 1; e = e.parentNode) {
+    const v = styleProp(e, name);
+    if (v !== null && v !== 'inherit') return v;
+  }
+  return null;
+}
+function isHidden(el) {
+  for (let e = el; e && e.nodeType === 1; e = e.parentNode) {
+    if (styleProp(e, 'display') === 'none') return true;
+  }
+  return inheritedProp(el, 'visibility') === 'hidden';
+}
+
+// ---------- curves ----------
+function cubicPts(x0, y0, x1, y1, x2, y2, x3, y3, n) {
+  const out = [];
+  for (let k = 1; k <= n; k++) {
+    const t = k / n, u = 1 - t;
+    out.push([
+      u * u * u * x0 + 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t * x3,
+      u * u * u * y0 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y3
+    ]);
+  }
+  return out;
+}
+function quadPts(x0, y0, x1, y1, x2, y2, n) {
+  const out = [];
+  for (let k = 1; k <= n; k++) {
+    const t = k / n, u = 1 - t;
+    out.push([u * u * x0 + 2 * u * t * x1 + t * t * x2, u * u * y0 + 2 * u * t * y1 + t * t * y2]);
+  }
+  return out;
+}
+function arcPts(x1, y1, rx, ry, phiDeg, fa, fs, x2, y2) {
+  if (rx === 0 || ry === 0 || (x1 === x2 && y1 === y2)) return [[x2, y2]];
+  rx = Math.abs(rx); ry = Math.abs(ry);
+  const phi = phiDeg * Math.PI / 180, cp = Math.cos(phi), sp = Math.sin(phi);
+  const dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
+  const x1p = cp * dx + sp * dy, y1p = -sp * dx + cp * dy;
+  const lam = (x1p * x1p) / (rx * rx) + (y1p * y1p) / (ry * ry);
+  if (lam > 1) { const s = Math.sqrt(lam); rx *= s; ry *= s; }
+  const sign = (!!fa === !!fs) ? -1 : 1;
+  let num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
+  if (num < 0) num = 0;
+  const den = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
+  const co = den === 0 ? 0 : sign * Math.sqrt(num / den);
+  const cxp = co * (rx * y1p / ry), cyp = co * (-ry * x1p / rx);
+  const cx = cp * cxp - sp * cyp + (x1 + x2) / 2, cy = sp * cxp + cp * cyp + (y1 + y2) / 2;
+  const ang = function (ux, uy, vx, vy) { return Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy); };
+  const th1 = ang(1, 0, (x1p - cxp) / rx, (y1p - cyp) / ry);
+  let dth = ang((x1p - cxp) / rx, (y1p - cyp) / ry, (-x1p - cxp) / rx, (-y1p - cyp) / ry);
+  if (!fs && dth > 0) dth -= 2 * Math.PI; else if (fs && dth < 0) dth += 2 * Math.PI;
+  const n = Math.max(8, Math.ceil(Math.abs(dth) / (Math.PI / 24)));
+  const out = [];
+  for (let k = 1; k <= n; k++) {
+    const t = th1 + dth * k / n, ex = rx * Math.cos(t), ey = ry * Math.sin(t);
+    out.push([cp * ex - sp * ey + cx, sp * ex + cp * ey + cy]);
+  }
+  return out;
+}
+
+// ---------- path data ----------
+function parsePath(d) {
+  const toks = d.match(/[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || [];
+  let i = 0, cmd = '', x = 0, y = 0, sx = 0, sy = 0;
+  let lcx = 0, lcy = 0, lqx = 0, lqy = 0, prev = '';
+  const subs = [];
+  let cur = null;
+  const isCmd = function () { return i < toks.length && /^[A-Za-z]/.test(toks[i]); };
+  const num = function () { return parseFloat(toks[i++]); };
+  const startSub = function (px, py) { cur = { pts: [[px, py]], closed: false }; subs.push(cur); };
+  const add = function (px, py) { if (!cur) startSub(x, y); cur.pts.push([px, py]); };
+  const addAll = function (arr) { for (let k = 0; k < arr.length; k++) add(arr[k][0], arr[k][1]); };
+  let guard = 0;
+  while (i < toks.length && guard++ < 2000000) {
+    if (isCmd()) cmd = toks[i++];
+    else if (cmd === 'M') cmd = 'L';
+    else if (cmd === 'm') cmd = 'l';
+    else if (cmd === '' || cmd === 'Z' || cmd === 'z') { i++; continue; }
+    const rel = cmd === cmd.toLowerCase();
+    const C = cmd.toUpperCase();
+    const ox = rel ? x : 0, oy = rel ? y : 0;
+    let nx, ny;
+    switch (C) {
+      case 'M': nx = num() + ox; ny = num() + oy; x = nx; y = ny; sx = x; sy = y; startSub(x, y); break;
+      case 'L': nx = num() + ox; ny = num() + oy; add(nx, ny); x = nx; y = ny; break;
+      case 'H': nx = num() + ox; add(nx, y); x = nx; break;
+      case 'V': ny = num() + oy; add(x, ny); y = ny; break;
+      case 'C': {
+        const x1 = num() + ox, y1 = num() + oy, x2 = num() + ox, y2 = num() + oy;
+        nx = num() + ox; ny = num() + oy;
+        addAll(cubicPts(x, y, x1, y1, x2, y2, nx, ny, 24));
+        lcx = x2; lcy = y2; x = nx; y = ny; break;
+      }
+      case 'S': {
+        const x1 = (prev === 'C' || prev === 'S') ? 2 * x - lcx : x;
+        const y1 = (prev === 'C' || prev === 'S') ? 2 * y - lcy : y;
+        const x2 = num() + ox, y2 = num() + oy;
+        nx = num() + ox; ny = num() + oy;
+        addAll(cubicPts(x, y, x1, y1, x2, y2, nx, ny, 24));
+        lcx = x2; lcy = y2; x = nx; y = ny; break;
+      }
+      case 'Q': {
+        const x1 = num() + ox, y1 = num() + oy;
+        nx = num() + ox; ny = num() + oy;
+        addAll(quadPts(x, y, x1, y1, nx, ny, 20));
+        lqx = x1; lqy = y1; x = nx; y = ny; break;
+      }
+      case 'T': {
+        const x1 = (prev === 'Q' || prev === 'T') ? 2 * x - lqx : x;
+        const y1 = (prev === 'Q' || prev === 'T') ? 2 * y - lqy : y;
+        nx = num() + ox; ny = num() + oy;
+        addAll(quadPts(x, y, x1, y1, nx, ny, 20));
+        lqx = x1; lqy = y1; x = nx; y = ny; break;
+      }
+      case 'A': {
+        const rx = num(), ry = num(), rot = num(), fa = num(), fs = num();
+        nx = num() + ox; ny = num() + oy;
+        addAll(arcPts(x, y, rx, ry, rot, fa, fs, nx, ny));
+        x = nx; y = ny; break;
+      }
+      case 'Z':
+        if (cur) cur.closed = true;
+        x = sx; y = sy; cur = null; break;
+      default: i++;
+    }
+    prev = C;
+    if (!isFinite(x) || !isFinite(y)) break;
+  }
+  return subs;
+}
+
+// ---------- basic shapes ----------
+function ellipseSub(cx, cy, rx, ry) {
+  const pts = [];
+  for (let k = 0; k < 64; k++) {
+    const t = k / 64 * Math.PI * 2;
+    pts.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
+  }
+  return { pts: pts, closed: true };
+}
+function rectSubs(x, y, w, h, rxA, ryA) {
+  if (!(w > 0) || !(h > 0)) return [];
+  let rx = parseFloat(rxA), ry = parseFloat(ryA);
+  if (!isFinite(rx) && !isFinite(ry)) { rx = 0; ry = 0; }
+  else if (!isFinite(rx)) rx = ry; else if (!isFinite(ry)) ry = rx;
+  rx = Math.min(Math.max(rx, 0), w / 2); ry = Math.min(Math.max(ry, 0), h / 2);
+  if (rx === 0 || ry === 0) return [{ pts: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]], closed: true }];
+  const pts = [];
+  const corner = function (cx, cy, a0) {
+    for (let k = 0; k <= 8; k++) { const a = a0 + k / 8 * Math.PI / 2; pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); }
+  };
+  corner(x + w - rx, y + ry, -Math.PI / 2);
+  corner(x + w - rx, y + h - ry, 0);
+  corner(x + rx, y + h - ry, Math.PI / 2);
+  corner(x + rx, y + ry, Math.PI);
+  return [{ pts: pts, closed: true }];
+}
+
+// ---------- walking the SVG ----------
+// opts: { fillMode: 'svg' | 'all' | 'none' }
+function parseSvg(text, opts) {
+  const warnings = [];
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+  const bad = doc.getElementsByTagName('parsererror');
+  if (bad.length) return { error: 'That does not look like valid SVG. ' + String(bad[0].textContent || '').split('\n')[0].slice(0, 160) };
+  const root = doc.documentElement;
+  if (!root || String(root.localName).toLowerCase() !== 'svg') return { error: 'The code does not have an <svg> element at the top.' };
+
+  const skip = { defs: 1, clippath: 1, mask: 1, symbol: 1, metadata: 1, title: 1, desc: 1, style: 1, script: 1, foreignobject: 1,
+    marker: 1, pattern: 1, lineargradient: 1, radialgradient: 1, filter: 1, image: 1 };
+  const subs = [];
+  let warnedText = false, warnedOther = false;
+
+  function byId(id) {
+    const all = doc.getElementsByTagName('*');
+    for (let k = 0; k < all.length; k++) if (all[k].getAttribute('id') === id) return all[k];
+    return null;
+  }
+
+  function shapeEl(el, tag, m) {
+    if (isHidden(el)) return;
+    const fill = inheritedProp(el, 'fill');
+    const stroke = inheritedProp(el, 'stroke');
+    const fillNone = fill === 'none' || (fill !== null && /^transparent$/i.test(fill));
+    const strokeNone = stroke === null || stroke === 'none';
+    if (fillNone && strokeNone) return;
+    const filled = !fillNone;
+    const getNum = function (n) { const v = parseFloat(el.getAttribute(n)); return isFinite(v) ? v : 0; };
+    let local = [];
+    if (tag === 'path') local = parsePath(el.getAttribute('d') || '');
+    else if (tag === 'rect') local = rectSubs(getNum('x'), getNum('y'), getNum('width'), getNum('height'), el.getAttribute('rx'), el.getAttribute('ry'));
+    else if (tag === 'circle') local = getNum('r') > 0 ? [ellipseSub(getNum('cx'), getNum('cy'), getNum('r'), getNum('r'))] : [];
+    else if (tag === 'ellipse') local = (getNum('rx') > 0 && getNum('ry') > 0) ? [ellipseSub(getNum('cx'), getNum('cy'), getNum('rx'), getNum('ry'))] : [];
+    else if (tag === 'line') local = [{ pts: [[getNum('x1'), getNum('y1')], [getNum('x2'), getNum('y2')]], closed: false }];
+    else if (tag === 'polyline' || tag === 'polygon') {
+      const nums = (el.getAttribute('points') || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || [];
+      const pts = [];
+      for (let k = 0; k + 1 < nums.length; k += 2) pts.push([parseFloat(nums[k]), parseFloat(nums[k + 1])]);
+      local = [{ pts: pts, closed: tag === 'polygon' }];
+    } else return;
+
+    for (let k = 0; k < local.length; k++) {
+      const s = local[k];
+      if (s.pts.length < 2) continue;
+      let closed = s.closed;
+      // a filled shape is closed even if its path was not
+      if (filled && s.pts.length >= 3 && (tag === 'path' || tag === 'polyline')) closed = true;
+      let pts = s.pts.map(function (p) { return mapply(m, p[0], p[1]); });
+      if (closed && pts.length > 2) {
+        const f = pts[0], l = pts[pts.length - 1];
+        if (Math.abs(f[0] - l[0]) < 1e-9 && Math.abs(f[1] - l[1]) < 1e-9) pts = pts.slice(0, -1);
+      }
+      if (pts.some(function (p) { return !isFinite(p[0]) || !isFinite(p[1]); })) continue;
+      let fillable = false;
+      if (closed && pts.length >= 3) {
+        if (opts.fillMode === 'all') fillable = true;
+        else if (opts.fillMode === 'svg') fillable = filled;
+      }
+      subs.push({ pts: pts, closed: closed && pts.length >= 3, fillable: fillable });
+    }
+  }
+
+  function processEl(ch, m, depth) {
+    if (depth > 25) return;
+    const tag = String(ch.localName).toLowerCase();
+    if (tag === 'text' || tag === 'tspan') {
+      if (!warnedText) { warnings.push('Text is not supported, so it was skipped. Convert text to outlines in your drawing program first.'); warnedText = true; }
+      return;
+    }
+    if (skip[tag]) return;
+    const m2 = mmul(m, parseTransform(ch.getAttribute('transform')));
+    if (tag === 'g' || tag === 'a' || tag === 'svg' || tag === 'symbol' || tag === 'switch') {
+      if (isHidden(ch)) return;
+      const kids = Array.from(ch.children);
+      for (let k = 0; k < kids.length; k++) processEl(kids[k], m2, depth + 1);
+      return;
+    }
+    if (tag === 'use') {
+      const href = ch.getAttribute('href') || ch.getAttribute('xlink:href') || ch.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+      const target = href && href.charAt(0) === '#' ? byId(href.slice(1)) : null;
+      if (target) {
+        const dx = parseFloat(ch.getAttribute('x')) || 0, dy = parseFloat(ch.getAttribute('y')) || 0;
+        processEl(target, mmul(m2, [1, 0, 0, 1, dx, dy]), depth + 1);
+      }
+      return;
+    }
+    if (tag === 'path' || tag === 'rect' || tag === 'circle' || tag === 'ellipse' || tag === 'line' || tag === 'polyline' || tag === 'polygon') {
+      shapeEl(ch, tag, m2);
+      return;
+    }
+    if (!warnedOther) { warnings.push('Some elements (<' + tag + '>) are not supported and were skipped.'); warnedOther = true; }
+  }
+
+  const rootKids = Array.from(root.children);
+  for (let k = 0; k < rootKids.length; k++) processEl(rootKids[k], [1, 0, 0, 1, 0, 0], 0);
+  if (!subs.length) return { error: 'No shapes were found. The SVG needs paths, rectangles, circles, lines or polygons.' };
+  return { subs: subs, warnings: warnings };
+}
+
+// ---------- fit into a unit square ----------
+function normalise(subs, flipY) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  subs.forEach(function (s) { s.pts.forEach(function (p) {
+    if (p[0] < x0) x0 = p[0]; if (p[0] > x1) x1 = p[0];
+    if (p[1] < y0) y0 = p[1]; if (p[1] > y1) y1 = p[1];
+  }); });
+  const size = Math.max(x1 - x0, y1 - y0) || 1;
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const sgn = flipY ? 1 : -1;      // SVG y runs down the page, GLSL y runs up
+  return subs.map(function (s) {
+    return { closed: s.closed, fillable: s.fillable,
+      pts: s.pts.map(function (p) { return [(p[0] - cx) / size, sgn * (p[1] - cy) / size]; }) };
+  });
+}
+
+// ---------- simplify (Ramer-Douglas-Peucker) ----------
+function rdp(pts, eps) {
+  const n = pts.length;
+  if (n < 3) return pts.slice();
+  const keep = new Uint8Array(n);
+  keep[0] = 1; keep[n - 1] = 1;
+  const stack = [[0, n - 1]];
+  while (stack.length) {
+    const ab = stack.pop(), a = ab[0], b = ab[1];
+    const ax = pts[a][0], ay = pts[a][1], bx = pts[b][0], by = pts[b][1];
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    let maxd = -1, idx = -1;
+    for (let k = a + 1; k < b; k++) {
+      let t = l2 ? ((pts[k][0] - ax) * dx + (pts[k][1] - ay) * dy) / l2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const d = Math.hypot(pts[k][0] - (ax + t * dx), pts[k][1] - (ay + t * dy));
+      if (d > maxd) { maxd = d; idx = k; }
+    }
+    if (maxd > eps && idx > 0) { keep[idx] = 1; stack.push([a, idx], [idx, b]); }
+  }
+  return pts.filter(function (_, k) { return keep[k]; });
+}
+function simplifySub(s, eps) {
+  let pts;
+  if (s.closed) {
+    pts = rdp(s.pts.concat([s.pts[0]]), eps);
+    pts.pop();
+  } else pts = rdp(s.pts, eps);
+  return { pts: pts, closed: s.closed, fillable: s.fillable };
+}
+function segCount(s) { return s.closed ? (s.pts.length >= 3 ? s.pts.length : 0) : Math.max(s.pts.length - 1, 0); }
+function simplifyAll(subs, maxSeg) {
+  const run = function (eps) {
+    return subs.map(function (s) { return simplifySub(s, eps); })
+      .filter(function (s) { return s.closed ? s.pts.length >= 3 : s.pts.length >= 2; });
+  };
+  const total = function (arr) { return arr.reduce(function (a, s) { return a + segCount(s); }, 0); };
+  let lo = 1e-5, best = run(lo);
+  if (total(best) <= maxSeg) return { subs: best, eps: lo, dropped: 0 };
+  let hi = 0.25;
+  let top = run(hi);
+  if (total(top) <= maxSeg) {
+    for (let it = 0; it < 24; it++) {
+      const mid = (lo + hi) / 2, r = run(mid);
+      if (total(r) <= maxSeg) { hi = mid; top = r; } else lo = mid;
+    }
+    return { subs: top, eps: hi, dropped: 0 };
+  }
+  // still too many: keep the biggest pieces
+  const size = function (s) {
+    let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+    s.pts.forEach(function (p) { a = Math.min(a, p[0]); c = Math.max(c, p[0]); b = Math.min(b, p[1]); d = Math.max(d, p[1]); });
+    return Math.hypot(c - a, d - b);
+  };
+  const sorted = top.slice().sort(function (p, q) { return size(q) - size(p); });
+  const kept = []; let n = 0;
+  sorted.forEach(function (s) { const c = segCount(s); if (n + c <= maxSeg) { kept.push(s); n += c; } });
+  return { subs: kept, eps: hi, dropped: top.length - kept.length };
+}
+
+// ---------- the baked shape ----------
+function buildShape(svgText, opts) {
+  const parsed = parseSvg(svgText, opts);
+  if (parsed.error) return { error: parsed.error };
+  const norm = normalise(parsed.subs, !!opts.flipY);
+  const rawPoints = norm.reduce(function (a, s) { return a + s.pts.length; }, 0);
+  const simp = simplifyAll(norm, opts.maxSeg);
+  const subs = simp.subs;
+
+  // lengths, so that the Trace effect can draw the shape on in order
+  let totalLen = 0;
+  const segs = [];
+  subs.forEach(function (s) {
+    const n = s.pts.length, count = s.closed ? n : n - 1;
+    for (let k = 0; k < count; k++) {
+      const a = s.pts[k], b = s.pts[(k + 1) % n];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (len < 1e-7) continue;
+      segs.push({ a: a, b: b, len: len, fill: !!(s.fillable && s.closed) });
+      totalLen += len;
+    }
+  });
+  let run = 0;
+  const C = [], O = [], TC = [], TO = [];
+  segs.forEach(function (g) {
+    const t = totalLen ? run / totalLen : 0;
+    run += g.len;
+    (g.fill ? C : O).push([g.a[0], g.a[1], g.b[0], g.b[1]]);
+    (g.fill ? TC : TO).push(t);
+  });
+  return {
+    C: C, O: O, TC: TC, TO: TO,
+    stats: { shapes: parsed.subs.length, closed: subs.filter(function (s) { return s.closed; }).length,
+      filled: subs.filter(function (s) { return s.fillable; }).length,
+      rawPoints: rawPoints, segments: C.length + O.length, dropped: simp.dropped },
+    warnings: parsed.warnings,
+    subs: subs
+  };
+}
+
+// ---------- generating the Material ----------
+function f4(v) { return Number(v).toFixed(4); }
+// a number written so that GLSL reads it as a float (strict GLSL ES will not turn 8 into 8.0 by itself)
+function flt(v) { const t = String(Number(v)); return /[.eE]/.test(t) ? t : t + '.0'; }
+function cleanText(s) { return String(s || '').replace(/\*\//g, '* /').replace(/[\r\n]+/g, ' ').trim(); }
+function normDef(def, min, max) {
+  if (!(max > min)) return 0;
+  const v = (def - min) / (max - min);
+  return Number(Math.min(1, Math.max(0, v)).toFixed(4));
+}
+
+// What each band does by default. Each target is a setting the audio can drive, and each number is how strongly
+// (0 off, 1 the standard amount).
+const REACT_TARGETS = [
+  { id: 'size',   label: 'Size',            note: 'The shape swells by up to 15 percent' },
+  { id: 'rotate', label: 'Rotation',        note: 'The shape tilts by up to 25 degrees' },
+  { id: 'thick',  label: 'Line thickness',  note: 'The lines get up to three times thicker' },
+  { id: 'fill',   label: 'Fill',            note: 'Filled shapes get more solid' },
+  { id: 'effect', label: 'Effect strength', note: 'The chosen effect (wobble, glitch, pulse or trace) gets stronger' },
+  { id: 'glow',   label: 'Glow',            note: 'The glow gets brighter' },
+  { id: 'hue',    label: 'Colour shift',    note: 'The colour gradient slides along the shape' },
+  { id: 'bright', label: 'Brightness',      note: 'The lines flash brighter' },
+  { id: 'shake',  label: 'Shake',           note: 'The whole shape trembles' }
+];
+const DEFAULT_REACT = {
+  size: { bass: 1, mid: 0, high: 0 }, rotate: { bass: 0, mid: 1, high: 0 }, thick: { bass: 0, mid: 0, high: 1 },
+  fill: { bass: 1, mid: 0, high: 0 }, effect: { bass: 1, mid: 0, high: 0 }, glow: { bass: 1, mid: 0, high: 0 },
+  hue: { bass: 0, mid: 0, high: 1 }, bright: { bass: 0, mid: 0, high: 0 }, shake: { bass: 0, mid: 0, high: 0 }
+};
+
+function effectParts(eff) {
+  if (eff === 'wobble') return {
+    consts: '// How fast the wobble ripples.\nconst float WOBBLE_SPEED = 0.4;\n',
+    helpers: '',
+    pre: '    p += effAmt * 0.03 * vec2(sin(p.y * 18.0 + tm * WOBBLE_SPEED), cos(p.x * 18.0 + tm * WOBBLE_SPEED * 0.87));\n'
+  };
+  if (eff === 'glitch') return {
+    consts: '// How many horizontal slices the shape is cut into, and how often they jump.\nconst float GLITCH_BANDS = 24.0;\nconst float GLITCH_RATE = 0.5;\n',
+    helpers: [
+      'float hash(vec2 p)', '{', '    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);', '}', '',
+      '// An irregular clock: it changes at the moments three unrelated clocks tick over.',
+      'float tickId(float t)', '{',
+      '    return mod(floor(t) + 31.0 * floor(t * 1.618 + 0.37) + 977.0 * floor(t * 0.382 + 0.11), 4096.0);', '}', '', ''
+    ].join('\n'),
+    pre: [
+      '    float band = floor(p.y * GLITCH_BANDS);',
+      '    float tick = tickId(tm * GLITCH_RATE);',
+      '    float jump = step(hash(vec2(band + 7.0, tick)), effAmt);',
+      '    p.x += jump * (hash(vec2(band, tick)) - 0.5) * 0.5 * effAmt;', ''
+    ].join('\n')
+  };
+  if (eff === 'pulse') return {
+    consts: '// How fast the shape swells and shrinks.\nconst float PULSE_RATE = 0.5;\n',
+    helpers: '',
+    pre: '    zoomEff *= 1.0 + effAmt * 0.3 * sin(tm * PULSE_RATE);\n'
+  };
+  return {    // trace
+    consts: '// How fast the outline draws itself on (draws per unit of time).\nconst float TRACE_RATE = 0.05;\n',
+    helpers: '',
+    pre: '    float prog = mix(1.0, fract(tm * TRACE_RATE), effAmt);\n'
+  };
+}
+
+function arrayDecl(type, name, rows, fmtRow) {
+  const n = Math.max(rows.length, 1);
+  const body = rows.length ? rows.map(fmtRow) : [type === 'vec4' ? 'vec4(0.0)' : '0.0'];
+  const lines = [];
+  for (let k = 0; k < body.length; k += 4) lines.push('    ' + body.slice(k, k + 4).join(', '));
+  return 'const ' + type + ' ' + name + '[' + n + '] = ' + type + '[' + n + '](\n' + lines.join(',\n') + '\n);\n';
+}
+
+// o: { name, author, colour, speed, effect, uuid, knobs: {...} }
+function generate(shape, o, audio) {
+  const eff = o.effect;
+  const K = o.knobs;
+  const parts = effectParts(eff);
+  const trace = eff === 'trace';
+  const effName = audio ? 'react' : eff;
+
+  // the audio reactions: for each setting, the bands that drive it, as an expression such as (bassLv + 0.5 * highLv)
+  const RX = o.react || DEFAULT_REACT;
+  const drive = function (id) {
+    const r = RX[id] || {}, terms = [];
+    [['bass', 'bassLv'], ['mid', 'midLv'], ['high', 'highLv']].forEach(function (b) {
+      const k = Number(r[b[0]]);
+      if (isFinite(k) && k > 0) terms.push(k === 1 ? b[1] : flt(k) + ' * ' + b[1]);
+    });
+    if (!terms.length) return null;
+    return terms.length > 1 ? '(' + terms.join(' + ') + ')' : terms[0];
+  };
+  const dSize = audio ? drive('size') : null, dRot = audio ? drive('rotate') : null, dThick = audio ? drive('thick') : null,
+    dFill = audio ? drive('fill') : null, dEff = audio ? drive('effect') : null, dGlow = audio ? drive('glow') : null,
+    dHue = audio ? drive('hue') : null, dBright = audio ? drive('bright') : null, dShake = audio ? drive('shake') : null;
+
+  const params = [];
+  params.push({ default: normDef(K.zoom.def, K.zoom.min, K.zoom.max), name: 'zoom', min: K.zoom.min, max: K.zoom.max });
+  params.push({ default: normDef(K.angle.def, -180, 180), name: 'angle', min: -180, max: 180 });
+  params.push({ default: normDef(K.thickness.def, K.thickness.min, K.thickness.max), name: 'thickness', min: K.thickness.min, max: K.thickness.max });
+  params.push({ default: Number(K.fill.def.toFixed(4)), name: 'fill' });
+  if (audio) params.push({ default: normDef(K.react.def, 0, K.react.max), name: 'react', min: 0, max: K.react.max });
+  else params.push({ default: Number(K.effect.def.toFixed(4)), name: eff });
+  params.push({ default: Number(K.glow.def.toFixed(4)), name: 'glow' });
+  params.push({ default: Number(K.rainbow.def.toFixed(4)), name: 'rainbow' });
+
+  const man = { author: cleanText(o.author), color: cleanText(o.colour) || 'white', movement: true,
+    parameters: params, url: '', uuid: audio ? o.uuidA : o.uuidP };
+
+  const L = [];
+  L.push('/*\n' + JSON.stringify(man, null, 4) + '\n*/');
+  L.push('');
+  L.push('// ' + cleanText(o.name) + (audio ? ' (audio-reactive)' : '') + ': an SVG shape, made with the SVG to VS2 Material converter.');
+  L.push('// The shape is baked into the SEGC and SEGO lists below (' + shape.stats.segments + ' straight segments).');
+  L.push('// The effect on knob 5 is ' + EFFECTS[eff].label + '. See the constants just below for the things you can tune by hand.');
+  L.push('');
+  L.push('#ifdef GL_ES');
+  L.push('precision highp float;');
+  L.push('#endif');
+  L.push('');
+  L.push('// Overall animation speed multiplier. Raise it for a faster maximum speed,');
+  L.push('// lower it for a slower one. VS2\'s Speed knob still scales on top of this.');
+  L.push('const float SPEED_SCALE = ' + flt(o.speed) + ';');
+  L.push('');
+  L.push('const float TAU = 6.28318530718;');
+  L.push('');
+  L.push(parts.consts);
+  if (audio) {
+    L.push('// How strong the effect is (0 to 1) when there is no sound. Loud bass adds to it.');
+    L.push('const float EFFECT_BASE = ' + flt(K.effect.def.toFixed(4)) + ';');
+    L.push('');
+    const hz = o.hz;
+    L.push('// The frequency range of each audio band, in Hz.');
+    L.push('// Change these to make a band listen to a different part of the sound.');
+    L.push('const vec2 BASS_HZ = vec2(' + flt(hz.bass[0]) + ', ' + flt(hz.bass[1]) + ');');
+    L.push('const vec2 MID_HZ  = vec2(' + flt(hz.mid[0]) + ', ' + flt(hz.mid[1]) + ');');
+    L.push('const vec2 HIGH_HZ = vec2(' + flt(hz.high[0]) + ', ' + flt(hz.high[1]) + ');');
+    L.push('');
+    L.push('// How VS2 lays out the FFT texture. VS2 does not document this, so these are assumptions:');
+    L.push('// the left edge of the texture is FFT_MIN_HZ, the right edge is FFT_MAX_HZ, and the');
+    L.push('// frequencies in between are spaced logarithmically (FFT_LOG = 1.0) or evenly (FFT_LOG = 0.0).');
+    L.push('// If a band reacts to the wrong part of the music, calibrate these (see the README).');
+    L.push('// FFT_MIN_HZ must be above 0.');
+    L.push('const float FFT_MIN_HZ = ' + flt(hz.fftMin) + ';');
+    L.push('const float FFT_MAX_HZ = ' + flt(hz.fftMax) + ';');
+    L.push('const float FFT_LOG = ' + (hz.log ? '1.0' : '0.0') + ';');
+    L.push('');
+  }
+  L.push('// ---- the shape, baked in from the SVG (each row is one straight edge: x1, y1, x2, y2) ----');
+  L.push('// The shape fits inside a square of side 1, centred on the origin.');
+  L.push('const int NC = ' + shape.C.length + ';    // edges of shapes that can be filled');
+  L.push('const int NO = ' + shape.O.length + ';    // edges of outlines and open lines');
+  const fmtSeg = function (r) { return 'vec4(' + r.map(f4).join(', ') + ')'; };
+  L.push(arrayDecl('vec4', 'SEGC', shape.C, fmtSeg));
+  L.push(arrayDecl('vec4', 'SEGO', shape.O, fmtSeg));
+  if (trace) {
+    L.push('// How far along the whole drawing each edge starts (0 to 1), for the Trace effect.');
+    L.push(arrayDecl('float', 'TC', shape.TC, f4));
+    L.push(arrayDecl('float', 'TO', shape.TO, f4));
+  }
+  if (audio) {
+    L.push('// where a frequency sits across the FFT texture (0 = left edge, 1 = right edge)');
+    L.push('float hzToX(float hz)');
+    L.push('{');
+    L.push('    float h = clamp(hz, FFT_MIN_HZ, FFT_MAX_HZ);');
+    L.push('    float lin = (h - FFT_MIN_HZ) / (FFT_MAX_HZ - FFT_MIN_HZ);');
+    L.push('    float lg = log(h / FFT_MIN_HZ) / log(FFT_MAX_HZ / FFT_MIN_HZ);');
+    L.push('    return mix(lin, lg, FFT_LOG);');
+    L.push('}');
+    L.push('');
+    L.push('// average level of the FFT over a range of frequencies, given in Hz');
+    L.push('float band(vec2 hz)');
+    L.push('{');
+    L.push('    float x0 = hzToX(hz.x);');
+    L.push('    float x1 = hzToX(hz.y);');
+    L.push('    float sum = 0.0;');
+    L.push('    for (int i = 0; i < 4; i++)');
+    L.push('    {');
+    L.push('        float x = mix(x0, x1, (float(i) + 0.5) / 4.0);');
+    L.push('        sum += texture(fftTex, vec2(x, 0.0)).r;');
+    L.push('    }');
+    L.push('    return sum / 4.0;');
+    L.push('}');
+    L.push('');
+  }
+  L.push(parts.helpers + [
+    'mat2 rot(float a)', '{', '    float c = cos(a);', '    float s = sin(a);', '    return mat2(c, s, -s, c);', '}', '',
+    'float segDist(vec2 p, vec2 a, vec2 b)', '{', '    vec2 pa = p - a;', '    vec2 ba = b - a;',
+    '    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-8), 0.0, 1.0);', '    return length(pa - ba * h);', '}', '',
+    'vec3 palette(float t)', '{', '    return 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.33, 0.67)));', '}', ''
+  ].join('\n'));
+
+  L.push('void main()');
+  L.push('{');
+  L.push('    float tm = time * SPEED_SCALE;');
+  if (audio) {
+    L.push('');
+    L.push('    // ---- audio: three bands, scaled by react and kept in 0..1 ----');
+    L.push('    float bassLv = clamp(band(BASS_HZ) * react, 0.0, 1.0);');
+    L.push('    float midLv  = clamp(band(MID_HZ)  * react, 0.0, 1.0);');
+    L.push('    float highLv = clamp(band(HIGH_HZ) * react, 0.0, 1.0);');
+  }
+  L.push('');
+  L.push('    float aspect = resolution.x / resolution.y;');
+  L.push('');
+  L.push('    // centred coordinates: screen height = 1, width = aspect');
+  L.push('    vec2 p = (texCoord - 0.5) * vec2(aspect, 1.0);');
+  L.push('');
+  if (audio) {
+    L.push('    // The audio reactions. Each number in front of bassLv, midLv or highLv is how strongly that band');
+    L.push('    // drives that setting: raise it for more, lower it for less, or delete the term to switch it off.');
+  }
+  L.push('    // angle is in degrees');
+  L.push('    p = rot(radians(' + (dRot ? 'angle + 25.0 * ' + dRot : 'angle') + ')) * p;');
+  L.push('');
+  L.push('    float effAmt = ' + (audio ? (dEff ? 'clamp(EFFECT_BASE + 0.6 * ' + dEff + ', 0.0, 1.0)' : 'EFFECT_BASE') : eff) + ';');
+  L.push('    float zoomEff = ' + (dSize ? 'zoom * (1.0 + 0.15 * ' + dSize + ')' : 'zoom') + ';');
+  L.push('    float thEff = ' + (dThick ? 'thickness * (1.0 + 2.0 * ' + dThick + ')' : 'thickness') + ';');
+  L.push('    float glowEff = ' + (dGlow ? 'clamp(glow + 0.4 * ' + dGlow + ', 0.0, 1.0)' : 'glow') + ';');
+  L.push('    float fillEff = ' + (dFill ? 'clamp(fill + 0.4 * ' + dFill + ', 0.0, 1.0)' : 'fill') + ';');
+  if (dBright) L.push('    float bright = 1.0 + 1.5 * ' + dBright + ';');
+  L.push('');
+  if (dShake) L.push('    p += 0.02 * ' + dShake + ' * vec2(sin(tm * 37.0), cos(tm * 41.0));\n');
+  L.push(parts.pre);
+  L.push('    // work in the shape\'s own units (the whole shape fits in a square of side 1)');
+  L.push('    p /= zoomEff;');
+  L.push('');
+  L.push('    float d = 1e5;');
+  L.push('    float inside = 0.0;');
+  if (trace) L.push('    float headT = 0.0;');
+  L.push('');
+  L.push('    // shapes that can be filled: find the nearest edge, and count edge crossings for the fill');
+  L.push('    for (int i = 0; i < NC; i++)');
+  L.push('    {');
+  L.push('        vec4 s = SEGC[i];');
+  L.push('        vec2 a = s.xy;');
+  L.push('        vec2 b = s.zw;');
+  L.push('        if ((a.y > p.y) != (b.y > p.y))');
+  L.push('        {');
+  L.push('            float xc = a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y);');
+  L.push('            if (p.x < xc) inside = 1.0 - inside;');
+  L.push('        }');
+  if (trace) {
+    L.push('        if (TC[i] > prog) continue;');
+    L.push('        float dd = segDist(p, a, b);');
+    L.push('        if (dd < d) { d = dd; headT = TC[i]; }');
+  } else {
+    L.push('        d = min(d, segDist(p, a, b));');
+  }
+  L.push('    }');
+  L.push('');
+  L.push('    // outlines and open lines');
+  L.push('    for (int i = 0; i < NO; i++)');
+  L.push('    {');
+  L.push('        vec4 s = SEGO[i];');
+  if (trace) {
+    L.push('        if (TO[i] > prog) continue;');
+    L.push('        float dd = segDist(p, s.xy, s.zw);');
+    L.push('        if (dd < d) { d = dd; headT = TO[i]; }');
+  } else {
+    L.push('        d = min(d, segDist(p, s.xy, s.zw));');
+  }
+  L.push('    }');
+  L.push('');
+  L.push('    float th = thEff / zoomEff;');
+  L.push('    float line = 1.0 - smoothstep(th * 0.6, th, d);');
+  if (trace) L.push('    line *= 1.0 + 2.0 * exp(-max(prog - headT, 0.0) * 40.0) * effAmt;');
+  L.push('    float halo = glowEff * exp(-d * zoomEff / 0.02) * 0.5;');
+  L.push('');
+  L.push('    // rainbow = 0 keeps the Layer colour only; 1 gives a colour gradient across the shape');
+  L.push('    float hue = p.x * 0.4 + p.y * 0.3 + tm * 0.03' + (dHue ? ' + 0.2 * ' + dHue : '') + ';');
+  L.push('    vec3 base = mix(vec3(1.0), palette(hue), rainbow);');
+  L.push('');
+  L.push('    vec3 col = base * (line + halo)' + (dBright ? ' * bright' : '') + ' + base * inside * fillEff * 0.5;');
+  L.push('');
+  L.push('    vec3 finalColor = clamp(col, 0.0, 1.0);');
+  L.push('    float coloredPixels = dot(finalColor, vec3(1.0));');
+  L.push('    fragColor = vec4(finalColor * color.rgb, alpha * coloredPixels);');
+  L.push('}');
+  L.push('');
+  return { code: L.join('\n'), params: params };
+}
+/* CORE-END */
+
+/* UI-START */
+(function () {
+  if (typeof document === 'undefined') return;
+  const $ = function (id) { return document.getElementById(id); };
+
+  // ---------- examples ----------
+  const EXAMPLES = {
+    star: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon fill="#000" points="50,5 61,38 96,38 68,59 79,92 50,72 21,92 32,59 4,38 39,38"/></svg>',
+    heart: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#000" d="M50 90 C10 60 5 35 25 20 C38 11 48 18 50 28 C52 18 62 11 75 20 C95 35 90 60 50 90 Z"/></svg>',
+    ring: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#000" fill-rule="evenodd" d="M50 5 A45 45 0 1 1 49.99 5 Z M50 25 A25 25 0 1 0 50.01 25 Z"/></svg>',
+    bolt: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polyline fill="none" stroke="#000" stroke-width="4" points="60,5 25,55 50,55 35,95 80,40 52,40 70,5 60,5"/></svg>'
+  };
+
+  // ---------- state ----------
+  const state = { shape: null, plain: null, audio: null, lastKey: '', values: {} };
+
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    const h = '0123456789abcdef'; let s = '';
+    for (let i = 0; i < 36; i++) {
+      if (i === 8 || i === 13 || i === 18 || i === 23) s += '-';
+      else if (i === 14) s += '4';
+      else if (i === 19) s += h[8 + Math.floor(Math.random() * 4)];
+      else s += h[Math.floor(Math.random() * 16)];
+    }
+    return s;
+  }
+  function numVal(id, fallback) {
+    const v = parseFloat($(id).value);
+    return isFinite(v) ? v : fallback;
+  }
+  // The file name keeps whatever the Name box says (by default the name of the uploaded file); only characters
+  // that are not allowed in file names are replaced.
+  function slug() {
+    const s = String($('mName').value || '').replace(/[\\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^[\s.]+|[\s.]+$/g, '').slice(0, 100);
+    return s || 'svg_shape';
+  }
+  function showFileNames() { $('fnHint').textContent = 'Files will be saved as "' + slug() + '.frag" and "' + slug() + '_audio.frag".'; }
+  function setStatus(el, text, kind) { el.textContent = text; el.className = 'status' + (kind ? ' ' + kind : ''); }
+
+  function readOptions() {
+    let zmin = numVal('zoomMin', 0.1), zmax = numVal('zoomMax', 3);
+    if (!(zmax > zmin)) zmax = zmin + 1;
+    let tmin = numVal('thMin', 0.001), tmax = numVal('thMax', 0.03);
+    if (!(tmax > tmin)) tmax = tmin + 0.01;
+    const clamp = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
+    let rmax = numVal('reactMax', 4); if (!(rmax > 0)) rmax = 4;
+    return {
+      name: String($('mName').value || 'svg_shape'),
+      author: $('mAuthor').value,
+      colour: $('mColour').value,
+      speed: clamp(numVal('mSpeed', 8), 0.1, 100),
+      effect: $('effect').value,
+      uuidP: $('uuidP').value || uuid(),
+      uuidA: $('uuidA').value || uuid(),
+      hz: readHz(),
+      react: readReact(),
+      knobs: {
+        zoom: { min: zmin, max: zmax, def: clamp(numVal('zoomDef', 0.8), zmin, zmax) },
+        angle: { def: clamp(numVal('angleDef', 0), -180, 180) },
+        thickness: { min: tmin, max: tmax, def: clamp(numVal('thDef', 0.004), tmin, tmax) },
+        fill: { def: clamp(numVal('fillDef', 0.3), 0, 1) },
+        effect: { def: clamp(numVal('effDef', 0.3), 0, 1) },
+        glow: { def: clamp(numVal('glowDef', 0.35), 0, 1) },
+        rainbow: { def: clamp(numVal('rainbowDef', 1), 0, 1) },
+        react: { max: rmax, def: clamp(numVal('reactDef', 2), 0, rmax) }
+      }
+    };
+  }
+  // how strongly each band drives each setting
+  function readReact() {
+    const out = {};
+    REACT_TARGETS.forEach(function (t) {
+      out[t.id] = {};
+      ['bass', 'mid', 'high'].forEach(function (b) {
+        const el = $('rx_' + t.id + '_' + b);
+        const v = el ? parseFloat(el.value) : 0;
+        out[t.id][b] = isFinite(v) ? Math.min(3, Math.max(0, Math.round(v * 100) / 100)) : 0;
+      });
+    });
+    return out;
+  }
+  function buildReactTable() {
+    const body = document.querySelector('#reactTable tbody');
+    body.innerHTML = '';
+    REACT_TARGETS.forEach(function (t) {
+      const tr = document.createElement('tr');
+      const th = document.createElement('td'); th.textContent = t.label; tr.appendChild(th);
+      ['bass', 'mid', 'high'].forEach(function (b) {
+        const td = document.createElement('td');
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.min = '0'; inp.max = '3'; inp.step = '0.1'; inp.className = 'setting';
+        inp.id = 'rx_' + t.id + '_' + b; inp.value = DEFAULT_REACT[t.id][b];
+        inp.setAttribute('aria-label', t.label + ' driven by ' + (b === 'mid' ? 'mids' : b === 'high' ? 'highs' : 'bass'));
+        inp.addEventListener('input', schedule); inp.addEventListener('change', schedule);
+        td.appendChild(inp); tr.appendChild(td);
+      });
+      const note = document.createElement('td'); note.textContent = t.note; tr.appendChild(note);
+      body.appendChild(tr);
+    });
+  }
+  function setReact(fn) {
+    REACT_TARGETS.forEach(function (t) { ['bass', 'mid', 'high'].forEach(function (b) { $('rx_' + t.id + '_' + b).value = fn(t.id, b); }); });
+    refresh();
+  }
+
+  // the three audio bands in Hz, and the assumed layout of the FFT texture
+  function readHz() {
+    let fmin = Math.max(1, numVal('fftMin', 20)), fmax = numVal('fftMax', 20000);
+    if (!(fmax > fmin)) fmax = fmin * 2;
+    const pair = function (loId, hiId, dLo, dHi) {
+      let lo = numVal(loId, dLo), hi = numVal(hiId, dHi);
+      lo = Math.min(Math.max(lo, fmin), fmax); hi = Math.min(Math.max(hi, fmin), fmax);
+      if (hi < lo) { const t = lo; lo = hi; hi = t; }
+      if (hi === lo) hi = Math.min(fmax, lo * 1.5 + 1);
+      return [lo, hi];
+    };
+    return { bass: pair('bassLo', 'bassHi', 40, 150), mid: pair('midLo', 'midHi', 250, 2000), high: pair('highLo', 'highHi', 4000, 12000),
+      fftMin: fmin, fftMax: fmax, log: $('fftScale').value === 'log' };
+  }
+  function shapeOptions() {
+    return { fillMode: $('fillMode').value, flipY: $('flipY').checked, maxSeg: parseInt($('maxSeg').value, 10) || 300 };
+  }
+
+  // ---------- remembering the author name (a cookie, only if the box is ticked) ----------
+  const COOKIE = 'vs2conv_author';
+  function getCookie() {
+    const m = document.cookie.split('; ').filter(function (c) { return c.indexOf(COOKIE + '=') === 0; })[0];
+    if (!m) return null;
+    try { return decodeURIComponent(m.slice(COOKIE.length + 1)); } catch (e) { return null; }
+  }
+  function saveAuthor() {
+    const on = $('rememberAuthor').checked;
+    const secure = location.protocol === 'https:' ? '; Secure' : '';
+    if (on) document.cookie = COOKIE + '=' + encodeURIComponent($('mAuthor').value) + '; max-age=31536000; path=/; SameSite=Lax' + secure;
+    else document.cookie = COOKIE + '=; max-age=0; path=/; SameSite=Lax' + secure;
+    if (on && getCookie() === null && $('mAuthor').value) setStatus($('outMsg'), 'This browser is not keeping cookies for this page (it may have been opened from a file), so your name will not be remembered.', 'warn');
+  }
+
+  // ---------- main refresh ----------
+  let timer = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(refresh, 160); }
+
+  function refresh() {
+    $('maxSegOut').textContent = $('maxSeg').value;
+    showFileNames();
+    const eff = $('effect').value;
+    $('effName').textContent = eff;
+    $('effBlurb').textContent = EFFECTS[eff].blurb;
+
+    const text = $('svgText').value.trim();
+    if (!text) {
+      state.shape = null; state.plain = state.audio = null;
+      setStatus($('stats'), 'Paste or upload an SVG to begin.', '');
+      $('outPlain').value = ''; $('outAudio').value = '';
+      drawShape();
+      Preview.set(null);
+      return;
+    }
+    const so = shapeOptions();
+    const key = text + '|' + so.fillMode + '|' + so.flipY + '|' + so.maxSeg;
+    if (key !== state.lastKey) {
+      state.lastKey = key;
+      try { state.shape = buildShape(text, so); }
+      catch (e) { state.shape = { error: 'Something went wrong reading that SVG: ' + e.message }; }
+    }
+    const sh = state.shape;
+    if (sh.error) {
+      setStatus($('stats'), sh.error, 'bad');
+      state.plain = state.audio = null;
+      $('outPlain').value = ''; $('outAudio').value = '';
+      drawShape();
+      Preview.set(null);
+      return;
+    }
+    const st = sh.stats;
+    let msg = 'Found ' + st.shapes + ' shape' + (st.shapes === 1 ? '' : 's') + ' (' + st.rawPoints + ' points), simplified to ' + st.segments + ' straight segments.';
+    msg += ' ' + st.filled + ' can be filled.';
+    let kind = 'ok';
+    if (st.dropped) { msg += ' ' + st.dropped + ' small shape' + (st.dropped === 1 ? ' was' : 's were') + ' left out to fit the limit.'; kind = 'warn'; }
+    if (sh.warnings && sh.warnings.length) { msg += ' ' + sh.warnings.join(' '); kind = 'warn'; }
+    if (st.segments > 600) { msg += ' Over 600 segments can be slow on some computers.'; kind = 'warn'; }
+    setStatus($('stats'), msg, kind);
+
+    const o = readOptions();
+    $('uuidP').value = o.uuidP; $('uuidA').value = o.uuidA;
+    state.fftMap = o.hz;
+    state.plain = generate(sh, o, false);
+    state.audio = generate(sh, o, true);
+    $('outPlain').value = state.plain.code;
+    $('outAudio').value = state.audio.code;
+    drawShape();
+    Preview.set(state);
+  }
+
+  // ---------- shape check canvas ----------
+  function drawShape() {
+    const c = $('shape'), g = c.getContext ? c.getContext('2d') : null;
+    if (!g || typeof Path2D === 'undefined') return;
+    g.clearRect(0, 0, c.width, c.height);
+    g.fillStyle = '#0b0b10'; g.fillRect(0, 0, c.width, c.height);
+    if (!state.shape || state.shape.error) return;
+    const W = c.width, S = W * 0.84, ox = W / 2, oy = c.height / 2;
+    const tx = function (p) { return [ox + p[0] * S, oy - p[1] * S]; };
+    g.fillStyle = 'rgba(255,95,168,0.35)';
+    g.strokeStyle = '#7fe3ff'; g.lineWidth = 1.5; g.lineJoin = 'round';
+    const fillPath = new Path2D();
+    state.shape.subs.forEach(function (s) {
+      const path = new Path2D();
+      s.pts.forEach(function (p, i) { const q = tx(p); if (i) path.lineTo(q[0], q[1]); else path.moveTo(q[0], q[1]); });
+      if (s.closed) path.closePath();
+      if (s.fillable) fillPath.addPath(path);
+      g.stroke(path);
+    });
+    g.fill(fillPath, 'evenodd');
+  }
+
+  // ---------- live preview (WebGL2) ----------
+  const Preview = (function () {
+    const canvas = $('gl');
+    let gl = null, prog = null, buf = null, fftTex = null, locs = {}, names = [], params = [], playing = true, raf = 0, t0 = performance.now();
+    let useAudio = false, curCode = '', curNames = '', ok = false;
+    const spectrum = new Uint8Array(256);
+
+    function init() {
+      try {
+        gl = canvas.getContext('webgl2', { alpha: false, antialias: false });
+      } catch (e) { gl = null; }
+      if (!gl) { setStatus($('glMsg'), 'Live preview needs WebGL2, which this browser does not offer. You can still download the Material.', 'warn'); return false; }
+      buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      fftTex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, fftTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 256, 1, 0, gl.RED, gl.UNSIGNED_BYTE, spectrum);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return true;
+    }
+
+    function compile(code, pnames) {
+      const header = '#version 300 es\nprecision highp float;\nprecision highp sampler2D;\nuniform vec2 resolution;\nuniform float time;\nuniform vec4 color;\nuniform float alpha;\nuniform sampler2D fftTex;\nin vec2 texCoord;\nout vec4 fragColor;\n' +
+        pnames.map(function (n) { return 'uniform float ' + n + ';\n'; }).join('');
+      const vs = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vs, '#version 300 es\nin vec2 pos;\nout vec2 texCoord;\nvoid main() { texCoord = pos * 0.5 + 0.5; gl_Position = vec4(pos, 0.0, 1.0); }\n');
+      gl.compileShader(vs);
+      const fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, header + code);
+      gl.compileShader(fs);
+      if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(fs) || 'unknown error';
+        gl.deleteShader(vs); gl.deleteShader(fs);
+        return { error: log };
+      }
+      const p = gl.createProgram();
+      gl.attachShader(p, vs); gl.attachShader(p, fs);
+      gl.bindAttribLocation(p, 0, 'pos');
+      gl.linkProgram(p);
+      gl.deleteShader(vs); gl.deleteShader(fs);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return { error: gl.getProgramInfoLog(p) || 'link error' };
+      return { prog: p };
+    }
+
+    function buildKnobs() {
+      const box = $('pvKnobs');
+      box.innerHTML = '';
+      params.forEach(function (p) {
+        const min = p.min === undefined ? 0 : p.min, max = p.max === undefined ? 1 : p.max;
+        const def = min + p.default * (max - min);
+        if (state.values[p.name] === undefined || state.values[p.name] < min || state.values[p.name] > max) state.values[p.name] = def;
+        const wrap = document.createElement('div'); wrap.className = 'knob';
+        const lab = document.createElement('label'); lab.setAttribute('for', 'pv_' + p.name);
+        const nm = document.createElement('span'); nm.textContent = p.name;
+        const out = document.createElement('output'); out.textContent = Number(state.values[p.name]).toFixed(3);
+        lab.appendChild(nm); lab.appendChild(out);
+        const r = document.createElement('input'); r.type = 'range'; r.id = 'pv_' + p.name;
+        r.min = min; r.max = max; r.step = (max - min) / 400; r.value = state.values[p.name];
+        r.addEventListener('input', function () { state.values[p.name] = parseFloat(r.value); out.textContent = parseFloat(r.value).toFixed(3); });
+        wrap.appendChild(lab); wrap.appendChild(r); box.appendChild(wrap);
+      });
+    }
+
+    function select() {
+      if (!gl || !state.plain) return;
+      const src = useAudio ? state.audio : state.plain;
+      params = src.params;
+      names = params.map(function (p) { return p.name; });
+      const sig = src.code;
+      if (sig !== curCode) {
+        curCode = sig;
+        const res = compile(src.code, names);
+        if (res.error) {
+          ok = false;
+          setStatus($('glMsg'), 'The preview could not compile this code (your browser said: ' + res.error.split('\n')[0].slice(0, 200) + '). It may still work in VS2.', 'warn');
+          return;
+        }
+        if (prog) gl.deleteProgram(prog);
+        prog = res.prog; ok = true;
+        locs = { resolution: gl.getUniformLocation(prog, 'resolution'), time: gl.getUniformLocation(prog, 'time'),
+          color: gl.getUniformLocation(prog, 'color'), alpha: gl.getUniformLocation(prog, 'alpha'), fftTex: gl.getUniformLocation(prog, 'fftTex') };
+        names.forEach(function (n) { locs[n] = gl.getUniformLocation(prog, n); });
+        setStatus($('glMsg'), '', '');
+      }
+      const sigK = names.join(',');
+      if (sigK !== curNames) { curNames = sigK; buildKnobs(); }
+    }
+
+    function hexToRgb(h) {
+      const v = parseInt(h.slice(1), 16);
+      return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];
+    }
+
+    function frame(now) {
+      raf = requestAnimationFrame(frame);
+      if (!gl || !prog || !ok) return;
+      const t = (now - t0) / 1000;
+      const w = Math.min(960, Math.floor(canvas.clientWidth * (window.devicePixelRatio || 1))) || 640;
+      const h = Math.round(w * 9 / 16);
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      if (useAudio) {
+        // a rough drumbeat: a kick every half second, a snare every second, hats in between
+        const beat = (t * 2) % 1, kick = Math.pow(Math.max(0, 1 - beat * 3), 2), snare = Math.pow(Math.max(0, 1 - ((t + 0.5) % 1) * 4), 2);
+        const fm = state.fftMap || { fftMin: 20, fftMax: 20000, log: true };
+        const hat = ((t * 8) % 1) < 0.3 ? 1 : 0.2;
+        const bump = function (f, centre, width) { const z = Math.log(f / centre) / Math.LN2 / width; return Math.exp(-z * z); };
+        for (let i = 0; i < 256; i++) {
+          const x = i / 255;
+          // the frequency at this point of the texture, using the same layout the generated code assumes
+          const f = fm.log ? fm.fftMin * Math.pow(fm.fftMax / fm.fftMin, x) : fm.fftMin + x * (fm.fftMax - fm.fftMin);
+          const ff = Math.max(f, 1);
+          const v = kick * 0.9 * bump(ff, 70, 1.2) + snare * 0.6 * bump(ff, 700, 1.3) + hat * (0.35 + 0.15 * Math.sin(t * 40 + i)) * bump(ff, 9000, 1.2);
+          spectrum[i] = Math.max(0, Math.min(255, Math.round(v * 255)));
+        }
+        gl.bindTexture(gl.TEXTURE_2D, fftTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RED, gl.UNSIGNED_BYTE, spectrum);
+      }
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(0.05, 0.05, 0.08, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform2f(locs.resolution, w, h);
+      gl.uniform1f(locs.time, playing ? t : lastT);
+      const c = hexToRgb($('mColour').value);
+      gl.uniform4f(locs.color, c[0], c[1], c[2], 1);
+      gl.uniform1f(locs.alpha, 1);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fftTex);
+      gl.uniform1i(locs.fftTex, 0);
+      names.forEach(function (n) { if (locs[n]) gl.uniform1f(locs[n], state.values[n]); });
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (playing) lastT = t;
+    }
+    let lastT = 0;
+
+    return {
+      start: function () {
+        if (!init()) return;
+        raf = requestAnimationFrame(frame);
+      },
+      set: function (s) {
+        if (!gl) return;
+        if (!s || !s.plain) { prog = null; ok = false; return; }
+        select();
+      },
+      setAudio: function (on) { useAudio = on; curCode = ''; this.set(state); },
+      toggle: function () {
+        playing = !playing;
+        if (playing) t0 = performance.now() - lastT * 1000;
+        return playing;
+      }
+    };
+  })();
+
+  // ---------- downloads and copying ----------
+  function download(name, text) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function copyText(text, label) {
+    const done = function () { setStatus($('outMsg'), label + ' copied to the clipboard.', 'ok'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+    else fallbackCopy(text, done);
+  }
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { setStatus($('outMsg'), 'Copying failed. Open "Show the code" and copy it by hand.', 'bad'); }
+    ta.remove();
+  }
+  function needCode() {
+    if (!state.plain) { setStatus($('outMsg'), 'Add a valid SVG first.', 'warn'); return false; }
+    return true;
+  }
+
+  // ---------- wiring ----------
+  document.querySelectorAll('.setting').forEach(function (el) { el.addEventListener('input', schedule); el.addEventListener('change', schedule); });
+  $('svgText').addEventListener('input', schedule);
+  $('fileInput').addEventListener('change', function (e) { readFile(e.target.files[0]); });
+  document.querySelectorAll('.ex').forEach(function (b) {
+    b.addEventListener('click', function () {
+      $('svgText').value = EXAMPLES[b.getAttribute('data-ex')];
+      const fm = b.getAttribute('data-ex') === 'bolt';
+      if (fm) { $('fillDef').value = 0; }
+      refresh();
+    });
+  });
+  $('mAuthor').addEventListener('input', function () { if ($('rememberAuthor').checked) saveAuthor(); });
+  $('rememberAuthor').addEventListener('change', saveAuthor);
+  $('newUuid').addEventListener('click', function () { $('uuidP').value = uuid(); $('uuidA').value = uuid(); refresh(); });
+  $('dlPlain').addEventListener('click', function () { if (needCode()) { download(slug() + '.frag', state.plain.code); setStatus($('outMsg'), 'Downloaded ' + slug() + '.frag', 'ok'); } });
+  $('dlAudio').addEventListener('click', function () { if (needCode()) { download(slug() + '_audio.frag', state.audio.code); setStatus($('outMsg'), 'Downloaded ' + slug() + '_audio.frag', 'ok'); } });
+  $('cpPlain').addEventListener('click', function () { if (needCode()) copyText(state.plain.code, 'The plain code'); });
+  $('cpAudio').addEventListener('click', function () { if (needCode()) copyText(state.audio.code, 'The audio-reactive code'); });
+  $('pvPlay').addEventListener('click', function () { $('pvPlay').textContent = Preview.toggle() ? 'Pause' : 'Play'; });
+  $('pvAudio').addEventListener('change', function () { Preview.setAudio($('pvAudio').checked); });
+
+  function readFile(file) {
+    if (!file) return;
+    // the Material takes the name of the file, and you can still change it
+    const base = String(file.name || '').replace(/\.[^.]*$/, '');
+    if (base) $('mName').value = base.slice(0, 100);
+    if (file.size > 8 * 1024 * 1024) { setStatus($('stats'), 'That file is over 8 MB, which is too big for this page.', 'bad'); return; }
+    const r = new FileReader();
+    r.onload = function () { $('svgText').value = String(r.result); refresh(); };
+    r.onerror = function () { setStatus($('stats'), 'The file could not be read.', 'bad'); };
+    r.readAsText(file);
+  }
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+  drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]); });
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('drop', function (e) { e.preventDefault(); if (e.target !== drop && e.dataTransfer && e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]); });
+
+  $('reactReset').addEventListener('click', function () { setReact(function (id, b) { return DEFAULT_REACT[id][b]; }); });
+  $('reactOff').addEventListener('click', function () { setReact(function () { return 0; }); });
+
+  // ---------- start ----------
+  buildReactTable();
+  const savedAuthor = getCookie();
+  if (savedAuthor) { $('mAuthor').value = savedAuthor; $('rememberAuthor').checked = true; }
+  $('uuidP').value = uuid(); $('uuidA').value = uuid();
+  $('svgText').value = EXAMPLES.star;
+  try { Preview.start(); } catch (e) { setStatus($('glMsg'), 'The live preview could not start. You can still download the Material.', 'warn'); }
+  refresh();
+})();
+/* UI-END */
+</script>
+</body>
+</html>

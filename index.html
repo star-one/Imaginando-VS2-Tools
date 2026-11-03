@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VS2 Tools: audio-reactive shaders and converters for Visual Synthesizer</title>
+<meta name="description" content="23 shader Materials for Imaginando VS2 (Visual Synthesizer), each with a plain and an audio-reactive version, plus two tools that turn SVG drawings and Shadertoy shaders into VS2 Materials.">
+<meta property="og:title" content="VS2 Tools: audio-reactive shaders and converters for Visual Synthesizer">
+<meta property="og:description" content="Shader Materials for VS2, plus converters for SVG drawings and Shadertoy shaders. Open source, MIT licence.">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; }
+p { margin: 0 0 10px; }
+section { margin: 0; }
+
+/* ---- the shared look: dark, precise, a little club-night ---- */
+:root {
+  --bg: #09090c; --panel: #111116; --panel2: #17171f; --ink: #ececf3; --muted: #a3a3b8; --line: #2a2a37;
+  --accent: #b8a2ff; --accent2: #4fe3ff; --accent-ink: #09090c; --focus: #4fe3ff;
+  --ok: #6fe7ab; --warn: #ffc762; --bad: #ff8393; --code-bg: #0d0d12;
+  --grad: linear-gradient(90deg, #8f6bff, #4fe3ff);
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+html { color-scheme: dark; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+body {
+  font-family: var(--sans); color: var(--ink); line-height: 1.6; letter-spacing: 0.005em;
+  background:
+    radial-gradient(1100px 560px at 85% -8%, rgba(143, 107, 255, 0.16), transparent 62%),
+    radial-gradient(900px 520px at -8% 6%, rgba(79, 227, 255, 0.09), transparent 58%),
+    var(--bg);
+  background-attachment: fixed;
+}
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent2); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--bg); padding: 8px 12px; border-radius: 6px; z-index: 10; }
+.skip:focus { left: 8px; }
+
+/* site bar */
+.sitebar { max-width: 1100px; margin: 0 auto; padding: 18px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
+.brand { font-family: var(--mono); font-weight: 600; letter-spacing: 0.24em; font-size: 0.78rem; color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 12px; }
+.brand:hover { color: var(--ink); }
+.brand .glyph { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
+.brand .glyph i { display: block; width: 3px; background: var(--grad); border-radius: 1px; }
+.sitebar ul { list-style: none; display: flex; gap: 4px 24px; flex-wrap: wrap; margin: 0; padding: 0; }
+.sitebar a.nav { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); text-decoration: none; padding: 6px 0; border-bottom: 1px solid transparent; }
+.sitebar a.nav:hover, .sitebar a.nav[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent2); }
+
+/* type */
+.eyebrow { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent2); margin: 28px 0 6px; }
+h1 { font-size: clamp(2rem, 4.6vw, 3.2rem); font-weight: 300; line-height: 1.06; letter-spacing: -0.012em; margin: 6px 0 12px; }
+h1 strong { font-weight: 600; }
+h2 { font-family: var(--mono); font-size: 0.78rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent2); margin: 0 0 14px; }
+h3 { font-weight: 500; letter-spacing: 0.01em; }
+.lead { color: var(--muted); font-size: 1.05rem; max-width: 66ch; }
+.hint { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: #d9d2ff; }
+
+/* panels */
+main > section.panel, section[aria-labelledby] { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 18px 0; box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.9); }
+main > section.panel::before, section[aria-labelledby]::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--grad); opacity: 0.75; }
+.note { border-left: 3px solid var(--accent2); border-radius: 0 8px 8px 0; background: rgba(79, 227, 255, 0.06); padding: 10px 14px; margin: 14px 0; }
+
+/* controls */
+label { color: var(--ink); }
+input[type=text], input[type=number], select, textarea { background: var(--code-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; }
+input[type=text]:hover, input[type=number]:hover, select:hover, textarea:hover { border-color: #3a3a4c; }
+input[type=color] { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; }
+input[type=range], input[type=checkbox] { accent-color: #8f6bff; }
+button, .btn { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); padding: 9px 16px; cursor: pointer; text-decoration: none; display: inline-block; transition: border-color 0.15s, transform 0.15s, background 0.15s; }
+button:hover, .btn:hover { border-color: var(--accent); filter: none; color: var(--ink); transform: translateY(-1px); }
+button.primary, .btn.primary { background: var(--grad); color: var(--accent-ink); border-color: transparent; }
+button.primary:hover, .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.08); }
+button:disabled { opacity: 0.4; cursor: default; transform: none; }
+table { border-collapse: collapse; }
+th { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); }
+td { border-bottom: 1px solid #1d1d27; }
+tr:hover td { background: rgba(255, 255, 255, 0.02); }
+tr.tried td { background: rgba(143, 107, 255, 0.14); }
+.cand-wrap { border: 1px solid var(--line); border-radius: 10px; background: var(--code-bg); }
+.drop { border: 1.5px dashed #3a3a4c; border-radius: 12px; background: rgba(255, 255, 255, 0.015); }
+.drop.over { border-color: var(--accent2); background: rgba(79, 227, 255, 0.07); }
+canvas { background: #07070a; border: 1px solid var(--line); border-radius: 12px; }
+details { border-top: 1px solid var(--line); padding-top: 8px; }
+summary { color: var(--accent); }
+ul.warns { color: var(--warn); }
+
+/* footer */
+footer { max-width: 1100px; margin: 36px auto 0; padding: 22px 16px 48px; color: var(--muted); font-size: 0.92rem; position: relative; }
+footer::before { content: ""; position: absolute; inset: 0 16px auto 16px; height: 1px; background: var(--grad); opacity: 0.6; }
+footer .notes p { max-width: 90ch; }
+footer .personal { max-width: 90ch; border-top: 1px solid var(--line); margin-top: 18px; padding-top: 4px; color: #c4c4d4; }
+footer .personal p { margin: 14px 0 0; }
+
+
+.container { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+.hero { padding: 40px 0 8px; position: relative; }
+.hero .lead { font-size: 1.18rem; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 26px 0 0; }
+.spectrum { display: flex; align-items: flex-end; gap: 4px; height: 96px; margin: 40px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.spectrum span { flex: 1; height: calc(var(--h) * 100%); background: var(--grad); border-radius: 2px 2px 0 0; opacity: 0.9; transform-origin: bottom; animation: pulse 2.8s ease-in-out infinite; animation-delay: var(--d); }
+@keyframes pulse { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+.block { margin: 64px 0 0; }
+.block > p.lead { margin-top: 0; }
+.three { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 18px; }
+.cell { border-top: 1px solid var(--line); padding-top: 12px; }
+.cell h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.cell p { margin: 0; color: var(--muted); }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; margin-top: 14px; }
+.toolcards { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.card { background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 8px; position: relative; transition: border-color 0.15s, transform 0.15s; }
+.card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.card h3 { margin: 0; font-size: 1.1rem; font-weight: 500; }
+.card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+.card .more { margin-top: auto; padding-top: 6px; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; }
+.toolcard { padding: 24px; }
+.toolcard h3 { font-size: 1.35rem; font-weight: 400; }
+.toolcard p { font-size: 1rem; }
+.toolcard .btn { align-self: flex-start; margin-top: 10px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; color: var(--muted); }
+.chip.audio { color: var(--accent2); border-color: rgba(79, 227, 255, 0.4); }
+.group { margin-top: 34px; }
+.group h3 { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.18em; text-transform: uppercase; font-weight: 500; margin: 0; color: var(--ink); }
+.group h3 + p { margin: 4px 0 0; color: var(--muted); }
+ol.steps { counter-reset: step; list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 12px; }
+ol.steps li { counter-increment: step; display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: baseline; border-top: 1px solid var(--line); padding-top: 12px; }
+ol.steps li::before { content: counter(step, decimal-leading-zero); font-family: var(--mono); color: var(--accent2); letter-spacing: 0.1em; }
+.warnbox { border: 1px solid rgba(255, 199, 98, 0.45); background: rgba(255, 199, 98, 0.07); border-radius: 12px; padding: 12px 16px; margin-top: 18px; }
+.warnbox strong { color: var(--warn); }
+
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the content</a>
+<nav class="sitebar" aria-label="Site"><a class="brand" href="index.html"><span class="glyph" aria-hidden="true"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:9px"></i><i style="height:13px"></i></span> VS2 TOOLS</a><ul><li><a class="nav" href="index.html" aria-current="page">Home</a></li><li><a class="nav" href="tools/svg-converter/index.html">SVG converter</a></li><li><a class="nav" href="tools/shadertoy-converter/index.html">Shadertoy converter</a></li><li><a class="nav" href="https://github.com/star-one/Imaginando-VS2-Tools">GitHub</a></li></ul></nav>
+<main id="content" class="container">
+  <section class="hero" aria-labelledby="top">
+    <p class="eyebrow">Imaginando VS2 / Visual Synthesizer</p>
+    <h1 id="top">Shaders and tools<br>for <strong>VS2</strong></h1>
+    <p class="lead">23 shader Materials for the VJ software VS2, each with a plain version and an audio-reactive version that moves with the music. And two tools that turn your own SVG drawings, and shaders from Shadertoy, into Materials of your own.</p>
+    <div class="cta">
+      <a class="btn primary" href="tools/svg-converter/index.html">SVG to Material</a>
+      <a class="btn primary" href="tools/shadertoy-converter/index.html">Shadertoy to Material</a>
+      <a class="btn" href="https://github.com/star-one/Imaginando-VS2-Tools">Source on GitHub</a>
+    </div>
+    <div class="spectrum" aria-hidden="true"><span style="--h:0.63;--d:-0.00s"></span><span style="--h:0.82;--d:-0.14s"></span><span style="--h:0.91;--d:-0.27s"></span><span style="--h:0.88;--d:-0.41s"></span><span style="--h:0.75;--d:-0.55s"></span><span style="--h:0.56;--d:-0.69s"></span><span style="--h:0.35;--d:-0.82s"></span><span style="--h:0.20;--d:-0.96s"></span><span style="--h:0.34;--d:-1.10s"></span><span style="--h:0.40;--d:-1.23s"></span><span style="--h:0.38;--d:-1.37s"></span><span style="--h:0.31;--d:-1.51s"></span><span style="--h:0.22;--d:-1.64s"></span><span style="--h:0.22;--d:-1.78s"></span><span style="--h:0.25;--d:-1.92s"></span><span style="--h:0.21;--d:-2.06s"></span><span style="--h:0.25;--d:-2.19s"></span><span style="--h:0.40;--d:-2.33s"></span><span style="--h:0.57;--d:-2.47s"></span><span style="--h:0.71;--d:-2.60s"></span><span style="--h:0.78;--d:-2.74s"></span><span style="--h:0.76;--d:-0.08s"></span><span style="--h:0.63;--d:-0.21s"></span><span style="--h:0.41;--d:-0.35s"></span><span style="--h:0.22;--d:-0.49s"></span><span style="--h:0.51;--d:-0.63s"></span><span style="--h:0.76;--d:-0.76s"></span><span style="--h:0.93;--d:-0.90s"></span><span style="--h:0.99;--d:-1.04s"></span><span style="--h:0.93;--d:-1.17s"></span><span style="--h:0.77;--d:-1.31s"></span><span style="--h:0.53;--d:-1.45s"></span><span style="--h:0.27;--d:-1.58s"></span><span style="--h:0.33;--d:-1.72s"></span><span style="--h:0.51;--d:-1.86s"></span><span style="--h:0.60;--d:-2.00s"></span><span style="--h:0.60;--d:-2.13s"></span><span style="--h:0.53;--d:-2.27s"></span><span style="--h:0.41;--d:-2.41s"></span><span style="--h:0.29;--d:-2.54s"></span><span style="--h:0.21;--d:-2.68s"></span><span style="--h:0.18;--d:-0.02s"></span><span style="--h:0.22;--d:-0.15s"></span><span style="--h:0.31;--d:-0.29s"></span></div>
+  </section>
+
+  <section class="block" aria-labelledby="what">
+    <h2 id="what">What this is</h2>
+    <p class="lead">VS2 lets you write your own visuals as small GLSL programs called Materials. This project is a collection of them, and the tools to make more.</p>
+    <div class="three">
+      <div class="cell"><h3>23 Materials</h3><p>Tunnels, fractals, vapourwave scenes, and visuals for noise music. Every one has knobs that follow the same order, so a controller keeps its mappings from one Material to the next.</p></div>
+      <div class="cell"><h3>Plain and audio-reactive</h3><p>Each Material comes in two versions. The audio-reactive one listens to VS2's spectrum and moves the picture with bass, mids and highs, with the frequency ranges set in Hz.</p></div>
+      <div class="cell"><h3>Two converters</h3><p>Paste an SVG or a Shadertoy shader, choose what each knob controls, preview it live, and download a ready-to-use Material. They run in your browser, and nothing is uploaded.</p></div>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="tools">
+    <h2 id="tools">Make your own</h2>
+    <div class="cards toolcards">
+      <article class="card toolcard">
+        <h3>SVG to VS2 Material</h3>
+        <div class="chips"><span class="chip">paste or upload</span><span class="chip">live preview</span><span class="chip audio">audio version</span></div>
+        <p>Turn a vector drawing into a Material that draws it as neon lines or a filled shape. Wobble it, glitch it, pulse it or trace it on, then choose how bass, mids and highs move it.</p>
+        <a class="btn primary" href="tools/svg-converter/index.html">Open the SVG converter</a>
+      </article>
+      <article class="card toolcard">
+        <h3>Shadertoy to VS2 Material</h3>
+        <div class="chips"><span class="chip">paste or upload</span><span class="chip">try values live</span><span class="chip audio">audio version</span></div>
+        <p>Bring a shader from Shadertoy into VS2. Drag a slider beside any number in the code to see what it does, then give the ones worth keeping a knob. Credit and licence are carried into the file.</p>
+        <a class="btn primary" href="tools/shadertoy-converter/index.html">Open the Shadertoy converter</a>
+      </article>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="materials">
+    <h2 id="materials">The Materials</h2>
+    <p class="lead">45 files in all. Each card links to a page with the description, the knobs, and the constants you can change in the code.</p>
+    <div class="group"><h3>Tunnels and abstract scenes</h3><p>Journeys through light: tunnels, curves and ray-marched forms.</p><div class="cards"><article class="card"><h3>Lissajous Curve</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A neon Lissajous figure that swells, tilts and morphs.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/lissajous" aria-label="Details and files for Lissajous Curve">Details and files &rarr;</a></article><article class="card"><h3>Stargate Slit Scan</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Streaks of coloured light rushing out of a bright slit, in the style of the Stargate sequence in 2001: A Space Odyssey.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/stargate_slitscan" aria-label="Details and files for Stargate Slit Scan">Details and files &rarr;</a></article><article class="card"><h3>Time Vortex</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A smoky, fibrous tunnel of gold and blue light with a bright opening at the centre.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/time_vortex" aria-label="Details and files for Time Vortex">Details and files &rarr;</a></article><article class="card"><h3>Smoke Tunnel</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A winding tunnel of billowing, cumulus-like smoke clouds, lit by random bursts of lightning.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/smoke_tunnel" aria-label="Details and files for Smoke Tunnel">Details and files &rarr;</a></article><article class="card"><h3>Waterpark Tube</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Sliding down a twisting, translucent tube of coloured sections, marked out by neon rings.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/waterpark_tube" aria-label="Details and files for Waterpark Tube">Details and files &rarr;</a></article><article class="card"><h3>Fractal Pyramid (audio-reactive)</h3><div class="chips"><span class="chip audio">audio-reactive</span></div><p>A glowing raymarched fractal pyramid, with the folds opening and closing to the music.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/fractal_pyramid" aria-label="Details and files for Fractal Pyramid (audio-reactive)">Details and files &rarr;</a></article><article class="card"><h3>Bumped Warp</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A shiny, warping, bump-mapped surface lit by a circling light, with holes that open in the pits of the bumps.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/bumped_warp" aria-label="Details and files for Bumped Warp">Details and files &rarr;</a></article></div></div>
+<div class="group"><h3>Fractals and mathematics</h3><p>The Mandelbrot set, the Sierpinski triangle, romanesco and the Game of Life.</p><div class="cards"><article class="card"><h3>Mandelbrot Set</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>The Mandelbrot set in glowing, rippling colour, with six places to dive into and a morph to a Julia set.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/mandelbrot" aria-label="Details and files for Mandelbrot Set">Details and files &rarr;</a></article><article class="card"><h3>Sierpinski Triangle</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Neon-outlined Sierpinski triangle that dives into itself forever.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/sierpinski" aria-label="Details and files for Sierpinski Triangle">Details and files &rarr;</a></article><article class="card"><h3>Romanesco</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A lit, three-dimensional-looking head of romanesco: spiral florets made of smaller spiral florets.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/romanesco" aria-label="Details and files for Romanesco">Details and files &rarr;</a></article><article class="card"><h3>Game of Life</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Conway&#x27;s Game of Life: Gosper glider guns firing endless streams of gliders.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/life" aria-label="Details and files for Game of Life">Details and files &rarr;</a></article></div></div>
+<div class="group"><h3>Vapourwave</h3><p>Sunsets, neon grids, palms, checkerboard floors and VHS glitch.</p><div class="cards"><article class="card"><h3>Vapor Sun</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>The retro sunset: a striped gradient sun over a calm, reflective sea, under a pink and violet sky.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/vapor_sun" aria-label="Details and files for Vapor Sun">Details and files &rarr;</a></article><article class="card"><h3>Vapor Grid</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A neon grid floor racing towards the horizon, with wireframe mountains.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/vapor_grid" aria-label="Details and files for Vapor Grid">Details and files &rarr;</a></article><article class="card"><h3>Vapor Shapes</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Tumbling neon wireframe cubes, octahedra and pyramids, with VHS-style pink and cyan ghosting.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/vapor_shapes" aria-label="Details and files for Vapor Shapes">Details and files &rarr;</a></article><article class="card"><h3>Vapor Palms</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Palm tree silhouettes with a neon pink and cyan rim light, swaying in the breeze.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/vapor_palms" aria-label="Details and files for Vapor Palms">Details and files &rarr;</a></article><article class="card"><h3>Vapor VHS</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A VHS glitch overlay: scanlines, a rolling tracking band, snow, glitch bars and colour fringing.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/vapor_vhs" aria-label="Details and files for Vapor VHS">Details and files &rarr;</a></article><article class="card"><h3>Vapor Checker</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A pink and teal checkerboard floor that ripples like cloth and fades into a pink haze.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/vapor_checker" aria-label="Details and files for Vapor Checker">Details and files &rarr;</a></article></div></div>
+<div class="group"><h3>Noise music</h3><p>Harsh, jagged and sudden, to sit alongside noise music. These flash on purpose.</p><div class="cards"><article class="card"><h3>Noise Shards</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A screen that shatters into hard-edged shards which flip between light and dark and re-form without warning.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/noise_shards" aria-label="Details and files for Noise Shards">Details and files &rarr;</a></article><article class="card"><h3>Noise Spikes</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Jagged seismograph traces with sudden bursts of huge spikes, scrolling past like a chart recorder.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/noise_spikes" aria-label="Details and files for Noise Spikes">Details and files &rarr;</a></article><article class="card"><h3>Noise Slabs</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Brutalist slabs of white, red, acid green and blue that flash independently and re-cut the whole screen without warning.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/noise_slabs" aria-label="Details and files for Noise Slabs">Details and files &rarr;</a></article><article class="card"><h3>Noise Saw</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Concentric buzzsaw rings that spin, drop out, and suddenly change size and tooth count.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/noise_saw" aria-label="Details and files for Noise Saw">Details and files &rarr;</a></article><article class="card"><h3>Noise Scribble</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>Thin vector scribbles that slash across the screen and re-draw themselves without warning, with bright flares at the corners.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/noise_scribble" aria-label="Details and files for Noise Scribble">Details and files &rarr;</a></article><article class="card"><h3>Noise Fissure</h3><div class="chips"><span class="chip">plain</span><span class="chip audio">audio-reactive</span></div><p>A network of jagged cracks that tears open across a black screen and re-forms somewhere else.</p><a class="more" href="https://github.com/star-one/Imaginando-VS2-Tools/tree/HEAD/noise_fissure" aria-label="Details and files for Noise Fissure">Details and files &rarr;</a></article></div></div>
+
+  </section>
+
+  <section class="block" aria-labelledby="use">
+    <h2 id="use">Using one in VS2</h2>
+    <ol class="steps">
+      <li><span>Download a <code>.frag</code> file from the project on GitHub, or make one with a converter.</span></li>
+      <li><span>In VS2's Material Editor, create a new shader Material and paste the code in (or import the file). The comment at the top of the file names the knobs.</span></li>
+      <li><span>For an audio-reactive Material, set the audio source on the Layer. The project README explains the settings, and how to check the frequency layout against your copy of VS2.</span></li>
+      <li><span>Adjust the constants at the top of a file to taste: the speed, the frequency bands, and the strength of each reaction are all there.</span></li>
+    </ol>
+    <div class="warnbox"><strong>A note on flashing.</strong> The noise-music Materials, and the audio-reactive versions in general, flash and change suddenly, on purpose. Please warn audiences who may include people with photosensitive epilepsy.</div>
+  </section>
+
+  <section class="block" aria-labelledby="open">
+    <h2 id="open">Open source</h2>
+    <p class="lead">Released under the MIT Licence. Two Materials (Fractal Pyramid and Bumped Warp) are adapted from other people's Shadertoy shaders and keep a link to the original, and shaders you convert stay under their own licences. Not affiliated with Imaginando or Shadertoy.</p>
+    <div class="cta"><a class="btn" href="https://github.com/star-one/Imaginando-VS2-Tools">Read the README on GitHub</a></div>
+  </section>
+</main>
+
+<footer>
+  <div class="personal">
+   <p>
+        A personal project by Simon Gray. If you enjoy this, you might like some of my music on <a href="https://music.youtube.com/channel/UCrjMIoxnq99mDNAVFrSDAtQ?feature=share" title="The Winterval Conspiracy on YouTube Music">YouTube Music</a>, on <a href="https://open.spotify.com/artist/5CIBF9NCIxs4BwDytgXH8K" title="The Winterval Conspiracy on Spotify">Spotify</a>, on <a href="https://itunes.apple.com/gb/artist/the-winterval-conspiracy/915956596" title="The Winterval Conspiracy on Apple Music">Apple Music</a>, and on <a href="https://www.amazon.co.uk/The-Winterval-Conspiracy/e/B00OT38POW/" title="The Winterval Conspiracy on Amazon">Amazon</a>. I've also got videos on <a href="https://www.youtube.com/@wintervalconspiracy" title="Simon Gray and The Winterval Conspiracy on YouTube">YouTube</a>. If you like it enough to give me some money, you can do that via <a href="http://winterval.org.uk/" title="The Winterval Conspiracy on Bandcamp">Bandcamp</a>. Made with the help of Claude; source available on <a href="https://github.com/star-one/Imaginando-VS2-Tools" title="VS2 Tools on GitHub">GitHub</a>.
+   </p>
+  </div>
+</footer>
+</body>
+</html>

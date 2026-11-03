@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shadertoy to VS2 Material converter</title>
+<meta name="description" content="Convert a Shadertoy shader into a Material for VS2 (Visual Synthesizer): choose which numbers become knobs, and download a plain and an audio-reactive .frag file. Everything runs in your browser.">
+<style>
+:root {
+  --bg: #fafafa; --panel: #ffffff; --ink: #1b1b22; --muted: #5a5a68; --line: #d4d4de;
+  --accent: #b0125f; --accent-ink: #ffffff; --focus: #0b57d0; --ok: #0a6b3a; --warn: #8a4b00; --bad: #a30f1f;
+  --code-bg: #f1f1f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111117; --panel: #1b1b24; --ink: #ececf3; --muted: #a6a6b6; --line: #34343f;
+    --accent: #ff5fa8; --accent-ink: #1a0510; --focus: #8ab4ff; --ok: #5fd68f; --warn: #ffbd5c; --bad: #ff7b88;
+    --code-bg: #14141b;
+  }
+}
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header, main, footer { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 24px; }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.15rem; margin: 0 0 12px; }
+p { margin: 0 0 10px; }
+.lead { color: var(--muted); max-width: 70ch; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 16px 0; }
+label { display: block; font-weight: 600; margin: 10px 0 4px; }
+.hint { color: var(--muted); font-weight: 400; font-size: 0.9rem; }
+input[type=text], input[type=number], select, textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit;
+}
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85rem; min-height: 180px; }
+input[type=color] { width: 56px; height: 36px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+input[type=range] { width: 100%; }
+button, .btn {
+  font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer;
+}
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:hover { filter: brightness(1.08); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.row > * { flex: 1 1 160px; }
+.row > .shrink { flex: 0 0 auto; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+@media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+.drop { border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); margin-top: 10px; }
+.drop.over { border-color: var(--accent); color: var(--ink); }
+.status { min-height: 1.5em; font-size: 0.95rem; }
+.status.ok { color: var(--ok); } .status.warn { color: var(--warn); } .status.bad { color: var(--bad); }
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td input { max-width: 110px; }
+.preview { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(200px, 320px); gap: 16px; }
+@media (max-width: 760px) { .preview { grid-template-columns: 1fr; } }
+canvas { width: 100%; background: #0b0b10; border-radius: 8px; display: block; aspect-ratio: 16 / 9; }
+canvas.sq { aspect-ratio: 1 / 1; max-width: 240px; }
+.knob { margin: 6px 0; }
+.knob label { margin: 0; display: flex; justify-content: space-between; font-weight: 600; font-size: 0.9rem; }
+.knob output { font-weight: 400; color: var(--muted); }
+details { margin-top: 10px; }
+summary { cursor: pointer; font-weight: 600; }
+.check { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-weight: 400; }
+.check input { width: auto; }
+footer { color: var(--muted); font-size: 0.9rem; padding-bottom: 40px; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+
+.cand-wrap { max-height: 380px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; }
+.cand-wrap table { font-size: 0.9rem; }
+td.ctx { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.82rem; }
+td.dis { color: var(--muted); }
+ul.warns { margin: 6px 0 0 18px; padding: 0; color: var(--warn); }
+.note { border-left: 4px solid var(--accent); padding: 6px 12px; margin: 10px 0; background: var(--bg); }
+td input.w { max-width: 90px; }
+.numgrid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr); gap: 16px; align-items: start; }
+.pvcol { position: sticky; top: 8px; }
+@media (max-width: 980px) { .numgrid { grid-template-columns: 1fr; } .pvcol { position: static; } }
+td.tryc { white-space: nowrap; }
+td.tryc input[type=range] { width: 120px; vertical-align: middle; }
+td.tryc output { display: inline-block; min-width: 3.2em; font-variant-numeric: tabular-nums; }
+td.tryc .was { color: var(--muted); font-size: 0.8rem; }
+td.tryc button { padding: 2px 8px; margin-left: 4px; }
+tr.tried td { background: rgba(176, 18, 95, 0.08); }
+
+/* ---- the shared look: dark, precise, a little club-night ---- */
+:root {
+  --bg: #09090c; --panel: #111116; --panel2: #17171f; --ink: #ececf3; --muted: #a3a3b8; --line: #2a2a37;
+  --accent: #b8a2ff; --accent2: #4fe3ff; --accent-ink: #09090c; --focus: #4fe3ff;
+  --ok: #6fe7ab; --warn: #ffc762; --bad: #ff8393; --code-bg: #0d0d12;
+  --grad: linear-gradient(90deg, #8f6bff, #4fe3ff);
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+html { color-scheme: dark; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+body {
+  font-family: var(--sans); color: var(--ink); line-height: 1.6; letter-spacing: 0.005em;
+  background:
+    radial-gradient(1100px 560px at 85% -8%, rgba(143, 107, 255, 0.16), transparent 62%),
+    radial-gradient(900px 520px at -8% 6%, rgba(79, 227, 255, 0.09), transparent 58%),
+    var(--bg);
+  background-attachment: fixed;
+}
+a { color: var(--accent); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+a:hover { color: var(--accent2); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--bg); padding: 8px 12px; border-radius: 6px; z-index: 10; }
+.skip:focus { left: 8px; }
+
+/* site bar */
+.sitebar { max-width: 1100px; margin: 0 auto; padding: 18px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px 24px; flex-wrap: wrap; }
+.brand { font-family: var(--mono); font-weight: 600; letter-spacing: 0.24em; font-size: 0.78rem; color: var(--ink); text-decoration: none; display: inline-flex; align-items: center; gap: 12px; }
+.brand:hover { color: var(--ink); }
+.brand .glyph { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; }
+.brand .glyph i { display: block; width: 3px; background: var(--grad); border-radius: 1px; }
+.sitebar ul { list-style: none; display: flex; gap: 4px 24px; flex-wrap: wrap; margin: 0; padding: 0; }
+.sitebar a.nav { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); text-decoration: none; padding: 6px 0; border-bottom: 1px solid transparent; }
+.sitebar a.nav:hover, .sitebar a.nav[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent2); }
+
+/* type */
+.eyebrow { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent2); margin: 28px 0 6px; }
+h1 { font-size: clamp(2rem, 4.6vw, 3.2rem); font-weight: 300; line-height: 1.06; letter-spacing: -0.012em; margin: 6px 0 12px; }
+h1 strong { font-weight: 600; }
+h2 { font-family: var(--mono); font-size: 0.78rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent2); margin: 0 0 14px; }
+h3 { font-weight: 500; letter-spacing: 0.01em; }
+.lead { color: var(--muted); font-size: 1.05rem; max-width: 66ch; }
+.hint { color: var(--muted); }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; color: #d9d2ff; }
+
+/* panels */
+main > section.panel, section[aria-labelledby] { position: relative; overflow: hidden; background: linear-gradient(180deg, var(--panel2), var(--panel)); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin: 18px 0; box-shadow: 0 18px 40px -28px rgba(0, 0, 0, 0.9); }
+main > section.panel::before, section[aria-labelledby]::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--grad); opacity: 0.75; }
+.note { border-left: 3px solid var(--accent2); border-radius: 0 8px 8px 0; background: rgba(79, 227, 255, 0.06); padding: 10px 14px; margin: 14px 0; }
+
+/* controls */
+label { color: var(--ink); }
+input[type=text], input[type=number], select, textarea { background: var(--code-bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; }
+input[type=text]:hover, input[type=number]:hover, select:hover, textarea:hover { border-color: #3a3a4c; }
+input[type=color] { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; }
+input[type=range], input[type=checkbox] { accent-color: #8f6bff; }
+button, .btn { font-family: var(--mono); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; border-radius: 999px; border: 1px solid var(--line); background: var(--panel2); color: var(--ink); padding: 9px 16px; cursor: pointer; text-decoration: none; display: inline-block; transition: border-color 0.15s, transform 0.15s, background 0.15s; }
+button:hover, .btn:hover { border-color: var(--accent); filter: none; color: var(--ink); transform: translateY(-1px); }
+button.primary, .btn.primary { background: var(--grad); color: var(--accent-ink); border-color: transparent; }
+button.primary:hover, .btn.primary:hover { color: var(--accent-ink); filter: brightness(1.08); }
+button:disabled { opacity: 0.4; cursor: default; transform: none; }
+table { border-collapse: collapse; }
+th { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); font-weight: 500; border-bottom: 1px solid var(--line); }
+td { border-bottom: 1px solid #1d1d27; }
+tr:hover td { background: rgba(255, 255, 255, 0.02); }
+tr.tried td { background: rgba(143, 107, 255, 0.14); }
+.cand-wrap { border: 1px solid var(--line); border-radius: 10px; background: var(--code-bg); }
+.drop { border: 1.5px dashed #3a3a4c; border-radius: 12px; background: rgba(255, 255, 255, 0.015); }
+.drop.over { border-color: var(--accent2); background: rgba(79, 227, 255, 0.07); }
+canvas { background: #07070a; border: 1px solid var(--line); border-radius: 12px; }
+details { border-top: 1px solid var(--line); padding-top: 8px; }
+summary { color: var(--accent); }
+ul.warns { color: var(--warn); }
+
+/* footer */
+footer { max-width: 1100px; margin: 36px auto 0; padding: 22px 16px 48px; color: var(--muted); font-size: 0.92rem; position: relative; }
+footer::before { content: ""; position: absolute; inset: 0 16px auto 16px; height: 1px; background: var(--grad); opacity: 0.6; }
+footer .notes p { max-width: 90ch; }
+footer .personal { max-width: 90ch; border-top: 1px solid var(--line); margin-top: 18px; padding-top: 4px; color: #c4c4d4; }
+footer .personal p { margin: 14px 0 0; }
+
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the tool</a>
+<nav class="sitebar" aria-label="Site"><a class="brand" href="../../index.html"><span class="glyph" aria-hidden="true"><i style="height:6px"></i><i style="height:12px"></i><i style="height:16px"></i><i style="height:9px"></i><i style="height:13px"></i></span> VS2 TOOLS</a><ul><li><a class="nav" href="../../index.html">Home</a></li><li><a class="nav" href="../../tools/svg-converter/index.html">SVG converter</a></li><li><a class="nav" href="../../tools/shadertoy-converter/index.html" aria-current="page">Shadertoy converter</a></li><li><a class="nav" href="https://github.com/star-one/Imaginando-VS2-Tools">GitHub</a></li></ul></nav>
+<header>
+  <p class="eyebrow">VS2 Tools / Shadertoy to Material</p>
+  <h1>Shadertoy to VS2 Material converter</h1>
+  <p class="lead">Turn a shader from <strong>Shadertoy</strong> into a Material for <strong>VS2 (Visual Synthesizer)</strong> by Imaginando. Paste or upload the code, choose which numbers in it should become knobs on VS2, and download a plain and an audio-reactive <code>.frag</code> file. Everything runs in your browser: your code is never uploaded anywhere.</p>
+  <div class="note"><strong>Check the licence first.</strong> Unless its author says otherwise, a Shadertoy shader is licensed CC BY-NC-SA 3.0: you must credit the author, you may not use it commercially, and anything you make from it must be shared under the same licence. This page keeps the credit in the converted file, but following the licence is up to you.</div>
+</header>
+
+<main id="content">
+  <section aria-labelledby="h-code">
+    <h2 id="h-code">1. The shader</h2>
+    <label for="srcText">Paste the code from the shader's <strong>Image</strong> tab <span class="hint">(it contains <code>mainImage</code>)</span></label>
+    <textarea id="srcText" spellcheck="false" placeholder="void mainImage( out vec4 fragColor, in vec2 fragCoord ) { ... }" style="min-height:240px"></textarea>
+    <details><summary>The shader has a Common tab</summary>
+      <label for="commonText">Paste the code from the Common tab here</label>
+      <textarea id="commonText" spellcheck="false" style="min-height:100px"></textarea>
+    </details>
+    <div class="row" style="margin-top:10px">
+      <div class="shrink"><label for="fileInput" style="margin-top:0">Upload a file <span class="hint">(.glsl, .frag or .txt)</span></label><input id="fileInput" type="file" accept=".glsl,.frag,.txt,text/plain"></div>
+      <div class="shrink"><span class="hint" style="display:block;margin-bottom:4px">Or try an example</span>
+        <button type="button" class="ex" data-ex="plasma">Plasma</button>
+        <button type="button" class="ex" data-ex="rings">Rings</button>
+        <button type="button" class="ex" data-ex="bars">Audio bars</button></div>
+    </div>
+    <div id="drop" class="drop" tabindex="0">...or drag a file onto this box</div>
+    <p id="stats" class="status" role="status" aria-live="polite"></p>
+    <ul id="warnList" class="warns"></ul>
+    <p class="hint"><strong>What converts:</strong> single-pass shaders, which is most of them. <strong>What does not:</strong> shaders that read other buffers (Buffer A to D, feedback), because a Material cannot remember the previous frame; textures, video, webcam and cubemaps (you can swap in noise, sound or black); keyboard input; and sound or VR shaders.</p>
+  </section>
+
+  <section aria-labelledby="h-credit">
+    <h2 id="h-credit">2. Credit</h2>
+    <div class="row">
+      <div><label for="cTitle">Shader title</label><input id="cTitle" class="setting" type="text" maxlength="100"></div>
+      <div><label for="cAuthor">Original author</label><input id="cAuthor" class="setting" type="text" maxlength="100"></div>
+    </div>
+    <div class="row">
+      <div><label for="cUrl">Link to the shader</label><input id="cUrl" class="setting" type="text" maxlength="200" placeholder="https://www.shadertoy.com/view/..."></div>
+      <div><label for="cLicence">Licence</label><input id="cLicence" class="setting" type="text" maxlength="120" list="licences" value="CC BY-NC-SA 3.0 (Shadertoy's default unless the author says otherwise)">
+        <datalist id="licences"><option value="CC BY-NC-SA 3.0 (Shadertoy's default unless the author says otherwise)"><option value="CC0 1.0"><option value="CC BY 3.0"><option value="CC BY-SA 3.0"><option value="MIT"></datalist></div>
+    </div>
+    <p class="hint">These go into the manifest and the header comment of the converted files.</p>
+  </section>
+
+  <section aria-labelledby="h-chan" id="chanSection" hidden>
+    <h2 id="h-chan">3. Textures</h2>
+    <p class="hint">This shader reads from texture channels. VS2 Materials have no textures, so choose what each one should be. If a channel shows another buffer on Shadertoy, the shader cannot be converted faithfully: choose black or noise.</p>
+    <div id="chanRows"></div>
+  </section>
+
+  <section aria-labelledby="h-nums">
+    <h2 id="h-nums">4. Numbers and preview</h2>
+    <p class="hint">These are the numbers in the shader's code. <strong>Try one:</strong> drag the slider in its row and watch the preview change. Nothing is committed: the slider only changes the preview. When a number turns out to be worth keeping, pick a knob for it in the last column, and that knob will start at the value you tried. VS2 has seven knobs per Material.</p>
+    <div class="numgrid">
+      <div class="numcol">
+        <div class="row">
+          <label class="check" style="margin:0"><input id="candAll" type="checkbox"> Show every number in the code, not just the named ones</label>
+          <div><label for="candFilter" style="margin-top:0">Search</label><input id="candFilter" type="text" placeholder="a name, a value, or part of a line"></div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div class="shrink"><button type="button" id="resetTries">Put every tried number back</button></div>
+          <div class="shrink"><button type="button" id="clearLinks">Clear all knobs</button></div>
+        </div>
+        <p id="candCount" class="hint" aria-live="polite"></p>
+        <div class="cand-wrap" style="max-height:460px"><table id="candTable"><thead><tr><th>Line</th><th>Where</th><th>Try it</th><th>Knob</th></tr></thead><tbody id="candBody"></tbody></table></div>
+      </div>
+      <div class="pvcol">
+        <canvas id="gl" width="640" height="360" aria-label="Live preview of the Material"></canvas>
+        <p id="glMsg" class="status" role="status" aria-live="polite"></p>
+        <div class="row" style="align-items:center">
+          <div class="shrink"><button type="button" id="pvPlay">Pause</button></div>
+          <div class="shrink"><label class="check" style="margin:0"><input id="pvAudio" type="checkbox"> Preview the audio version, with simulated music</label></div>
+        </div>
+        <div id="pvKnobs"></div>
+        <p class="hint">The preview runs the converted code in your browser. It is an approximation: VS2 may differ, heavy shaders may be slow here, and the simulated music is only a rough drumbeat. At most eight numbers can be tried at once; trying a ninth puts the oldest back.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-knobs">
+    <h2 id="h-knobs">5. Knobs</h2>
+    <p class="hint">Names and ranges are filled in from the numbers you linked; change any of them if you like. A knob's value is the value of the first number linked to it (other numbers on the same knob keep their proportions), and "Starts at" is where the knob sits when the Material loads. In the audio version, the three boxes on the right say how strongly bass, mids and highs move each knob: 1 moves it a quarter of its range, negative numbers move it down, and 0 does nothing.</p>
+    <table id="knobTable">
+      <thead><tr><th>Knob</th><th>Name</th><th>Lowest</th><th>Highest</th><th>Starts at</th><th>Numbers</th><th>Bass</th><th>Mids</th><th>Highs</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="row" style="margin-top:12px">
+      <div><label for="mouseX">Mouse across is knob</label><select id="mouseX" class="setting"></select></div>
+      <div><label for="mouseY">Mouse up is knob</label><select id="mouseY" class="setting"></select></div>
+    </div>
+    <p class="hint">Only needed if the shader uses the mouse (<code>iMouse</code>). The two knobs then stand in for the mouse position. Otherwise the mouse is left at zero.</p>
+  </section>
+
+  <section aria-labelledby="h-mat">
+    <h2 id="h-mat">6. The Material</h2>
+    <div class="row">
+      <div><label for="mName">Name <span class="hint">(used for the file names)</span></label><input id="mName" class="setting" type="text" value="shadertoy_shader" maxlength="100"></div>
+      <div><label for="mAuthor">Your name <span class="hint">(as the converter)</span></label><input id="mAuthor" class="setting" type="text" value="" maxlength="80" placeholder="Your name">
+        <label class="check"><input id="rememberAuthor" type="checkbox"> Remember my name on this device <span class="hint">(saves a cookie)</span></label></div>
+      <div class="shrink"><label for="mColour">Layer colour</label><input id="mColour" class="setting" type="color" value="#ffffff"></div>
+      <div class="shrink"><label for="mSpeed">Speed multiplier</label><input id="mSpeed" class="setting" type="number" min="0.1" max="100" step="0.1" value="8" style="width:110px"></div>
+    </div>
+    <p class="hint" id="fnHint" aria-live="polite"></p>
+    <p class="hint">The speed multiplier is <code>SPEED_SCALE</code> in the code: the shader's clock runs at VS2's Speed knob times this number. The project default is 8; set it to 1 to run at the speed the shader was written for.</p>
+    <div class="row">
+      <div><label for="alphaMode">Transparency</label>
+        <select id="alphaMode" class="setting">
+          <option value="opaque">Opaque, as on Shadertoy</option>
+          <option value="black">Black is see-through (layers well)</option>
+          <option value="shader">Use the shader's own alpha</option>
+        </select></div>
+      <div class="shrink"><label class="check"><input id="tint" class="setting" type="checkbox"> Tint with the Layer colour</label></div>
+      <div class="shrink"><label for="uuidP">Plain UUID</label><input id="uuidP" class="setting" type="text" style="width:300px" maxlength="40"></div>
+      <div class="shrink"><label for="uuidA">Audio UUID</label><input id="uuidA" class="setting" type="text" style="width:300px" maxlength="40"></div>
+      <div class="shrink"><button type="button" id="newUuid">New UUIDs</button></div>
+    </div>
+
+    <h3 style="margin:18px 0 6px;font-size:1rem">The audio version</h3>
+    <div class="row">
+      <div class="shrink"><label for="reactSlot">The <code>react</code> knob goes in slot</label><select id="reactSlot" class="setting" style="width:90px"><option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option></select></div>
+      <div class="shrink"><label for="reactDef">react starts at</label><input id="reactDef" class="setting" type="number" step="0.1" value="2" style="width:100px"></div>
+      <div class="shrink"><label for="reactMax">react goes up to</label><input id="reactMax" class="setting" type="number" step="0.5" value="4" style="width:100px"></div>
+    </div>
+    <p class="hint">If fewer than seven knobs are in use, <code>react</code> is simply added. If all seven are in use, it takes the chosen slot and the knob that was there becomes a fixed number. <code>react</code> also scales the sound the shader reads, if it reads any.</p>
+    <p class="hint" style="margin-bottom:0">Flash the whole picture brighter with the music (0 does nothing):</p>
+    <div class="row">
+      <div class="shrink"><label for="brBass">Bass</label><input id="brBass" class="setting" type="number" min="0" max="3" step="0.1" value="0" style="width:90px"></div>
+      <div class="shrink"><label for="brMid">Mids</label><input id="brMid" class="setting" type="number" min="0" max="3" step="0.1" value="0" style="width:90px"></div>
+      <div class="shrink"><label for="brHigh">Highs</label><input id="brHigh" class="setting" type="number" min="0" max="3" step="0.1" value="0" style="width:90px"></div>
+    </div>
+
+    <h3 style="margin:18px 0 6px;font-size:1rem">Audio frequency bands</h3>
+    <p class="hint">Give each band's lowest and highest frequency in Hz. VS2 does not say how frequencies are laid out across its FFT texture, so the last three boxes are an assumption you can correct: the frequency at the left edge, the frequency at the right edge, and whether the spacing is logarithmic or even. The defaults assume 20 Hz to 20,000 Hz, logarithmic.</p>
+    <div class="row">
+      <div><label for="bassLo">Bass from (Hz)</label><input id="bassLo" class="setting" type="number" min="1" step="1" value="40"></div>
+      <div><label for="bassHi">to (Hz)</label><input id="bassHi" class="setting" type="number" min="1" step="1" value="150"></div>
+      <div><label for="midLo">Mids from (Hz)</label><input id="midLo" class="setting" type="number" min="1" step="1" value="250"></div>
+      <div><label for="midHi">to (Hz)</label><input id="midHi" class="setting" type="number" min="1" step="1" value="2000"></div>
+      <div><label for="highLo">Highs from (Hz)</label><input id="highLo" class="setting" type="number" min="1" step="1" value="4000"></div>
+      <div><label for="highHi">to (Hz)</label><input id="highHi" class="setting" type="number" min="1" step="1" value="12000"></div>
+    </div>
+    <div class="row">
+      <div><label for="fftMin">Texture left edge (Hz)</label><input id="fftMin" class="setting" type="number" min="1" step="1" value="20"></div>
+      <div><label for="fftMax">Texture right edge (Hz)</label><input id="fftMax" class="setting" type="number" min="2" step="1" value="20000"></div>
+      <div><label for="fftScale">Spacing</label><select id="fftScale" class="setting"><option value="log">Logarithmic</option><option value="lin">Even (linear)</option></select></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-out">
+    <h2 id="h-out">7. Download</h2>
+    <div class="row">
+      <div class="shrink"><button type="button" id="dlPlain" class="primary">Download plain .frag</button></div>
+      <div class="shrink"><button type="button" id="dlAudio" class="primary">Download audio-reactive .frag</button></div>
+      <div class="shrink"><button type="button" id="cpPlain">Copy plain code</button></div>
+      <div class="shrink"><button type="button" id="cpAudio">Copy audio code</button></div>
+    </div>
+    <p id="outMsg" class="status" role="status" aria-live="polite"></p>
+    <details><summary>Show the plain code</summary><textarea id="outPlain" readonly spellcheck="false" aria-label="Generated plain code"></textarea></details>
+    <details><summary>Show the audio-reactive code</summary><textarea id="outAudio" readonly spellcheck="false" aria-label="Generated audio-reactive code"></textarea></details>
+    <p class="hint" style="margin-top:12px">In VS2, create a new shader Material in the Material Editor and paste the code in (or import the file, if your version offers that). The comment block at the top names the knobs.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="notes">
+  <p>Shadertoy shaders are written for a different environment, so some will not convert cleanly. If a converted shader does not compile in VS2, the error usually points at the line that needs attention. Not affiliated with Shadertoy or Imaginando. The code you give this page stays on your device. The only thing this page can store is your name, and only if you tick "Remember my name": it is saved as a cookie on your device and is never sent anywhere by this page.</p>
+  </div>
+  <div class="personal">
+   <p>
+        A personal project by Simon Gray. If you enjoy this, you might like some of my music on <a href="https://music.youtube.com/channel/UCrjMIoxnq99mDNAVFrSDAtQ?feature=share" title="The Winterval Conspiracy on YouTube Music">YouTube Music</a>, on <a href="https://open.spotify.com/artist/5CIBF9NCIxs4BwDytgXH8K" title="The Winterval Conspiracy on Spotify">Spotify</a>, on <a href="https://itunes.apple.com/gb/artist/the-winterval-conspiracy/915956596" title="The Winterval Conspiracy on Apple Music">Apple Music</a>, and on <a href="https://www.amazon.co.uk/The-Winterval-Conspiracy/e/B00OT38POW/" title="The Winterval Conspiracy on Amazon">Amazon</a>. I've also got videos on <a href="https://www.youtube.com/@wintervalconspiracy" title="Simon Gray and The Winterval Conspiracy on YouTube">YouTube</a>. If you like it enough to give me some money, you can do that via <a href="http://winterval.org.uk/" title="The Winterval Conspiracy on Bandcamp">Bandcamp</a>. Made with the help of Claude; source available on <a href="https://github.com/star-one/Imaginando-VS2-Tools" title="VS2 Tools on GitHub">GitHub</a>.
+   </p>
+  </div>
+</footer>
+
+<script>
+/* CORE-START */
+'use strict';
+
+// ---------------------------------------------------------------------------------------------
+// Shadertoy to VS2 Material: the conversion engine (no page code in here, so it can be tested alone)
+// ---------------------------------------------------------------------------------------------
+
+const VS2_NAMES = ['time', 'resolution', 'color', 'alpha', 'texCoord', 'fftTex', 'fragColor'];
+const GL_TYPES = {};
+['float', 'int', 'uint', 'bool', 'vec2', 'vec3', 'vec4', 'ivec2', 'ivec3', 'ivec4', 'uvec2', 'uvec3', 'uvec4', 'bvec2', 'bvec3', 'bvec4',
+  'mat2', 'mat3', 'mat4', 'mat2x2', 'mat2x3', 'mat2x4', 'mat3x2', 'mat3x3', 'mat3x4', 'mat4x2', 'mat4x3', 'mat4x4'].forEach(function (t) { GL_TYPES[t] = 1; });
+const GL_QUALS = {};
+['const', 'in', 'out', 'inout', 'uniform', 'highp', 'mediump', 'lowp', 'flat', 'smooth', 'centroid', 'invariant'].forEach(function (t) { GL_QUALS[t] = 1; });
+const GL_KEYWORDS_BEFORE_UNARY = { 'return': 1, 'case': 1, 'else': 1 };
+
+const KNOB_SLOTS = 7;
+
+// ---------- number formatting ----------
+function num6(v) { return parseFloat(Number(v).toPrecision(6)); }
+function fnum(v) {                      // a float literal that GLSL will read as a float, never as an int
+  const t = String(num6(v));
+  if (/e/i.test(t)) return t.indexOf('.') < 0 && !/e/i.test(t) ? t + '.0' : t.replace(/^(-?\d+)e/i, '$1.0e');
+  return /\./.test(t) ? t : t + '.0';
+}
+function cleanText(s) { return String(s === undefined || s === null ? '' : s).replace(/\*\//g, '* /').replace(/[\r\n]+/g, ' ').trim(); }
+
+// ---------- the tokeniser ----------
+function tokenise(src) {
+  const toks = [];
+  const n = src.length;
+  const idRe = /[A-Za-z_][A-Za-z0-9_]*/y;
+  const numRe = /0[xX][0-9a-fA-F]+[uU]?|(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[fFuU]?/y;
+  const ppRe = /#[ \t]*([A-Za-z_]*)/y;
+  let i = 0, line = 1, atLineStart = true, pp = null, defName = null;
+  const push = function (t, s, extra) {
+    const tk = { t: t, s: s, i: i, j: i + s.length, line: line, pp: pp };
+    if (pp === 'define' && defName !== null) tk.def = defName;
+    if (extra) for (const k in extra) tk[k] = extra[k];
+    toks.push(tk); i += s.length; return tk;
+  };
+  while (i < n) {
+    const c = src[i], c2 = src[i + 1];
+    if (c === '\\' && pp && (c2 === '\n' || (c2 === '\r' && src[i + 2] === '\n'))) { const s = c2 === '\n' ? '\\\n' : '\\\r\n'; push('ws', s); line++; continue; }
+    if (c === '\n') { push('ws', '\n'); line++; atLineStart = true; pp = null; defName = null; continue; }
+    if (c === ' ' || c === '\t' || c === '\r') { let j = i; while (j < n && (src[j] === ' ' || src[j] === '\t' || src[j] === '\r')) j++; push('ws', src.slice(i, j)); continue; }
+    if (c === '/' && c2 === '/') { let j = src.indexOf('\n', i); if (j < 0) j = n; push('comment', src.slice(i, j)); continue; }
+    if (c === '/' && c2 === '*') {
+      let j = src.indexOf('*/', i + 2); j = j < 0 ? n : j + 2;
+      const s = src.slice(i, j); push('comment', s); line += (s.match(/\n/g) || []).length; continue;
+    }
+    if (c === '#' && atLineStart) {
+      ppRe.lastIndex = i; const m = ppRe.exec(src);
+      const dir = (m[1] || '').toLowerCase();
+      push('pp', m[0], { dir: dir }); pp = dir || 'none'; atLineStart = false; continue;
+    }
+    atLineStart = false;
+    if (/[A-Za-z_]/.test(c)) {
+      idRe.lastIndex = i; const m = idRe.exec(src);
+      if (pp === 'define' && defName === null) {
+        const tk = push('id', m[0], { role: 'macro', fn: src[i + m[0].length] === '(' });
+        defName = tk.s;
+      } else push('id', m[0]);
+      continue;
+    }
+    if (/[0-9]/.test(c) || (c === '.' && c2 !== undefined && /[0-9]/.test(c2))) {
+      numRe.lastIndex = i; const m = numRe.exec(src);
+      const s = m[0];
+      const isHex = /^0[xX]/.test(s);
+      push('num', s, { isFloat: !isHex && (/[.eE]/.test(s) || /[fF]$/.test(s)) });
+      continue;
+    }
+    push('op', c);
+  }
+  return toks;
+}
+
+function applyEdits(text, edits) {
+  const sorted = edits.slice().sort(function (a, b) { return b.start - a.start || b.end - a.end; });
+  let out = text, lastStart = Infinity;
+  for (let k = 0; k < sorted.length; k++) {
+    const e = sorted[k];
+    if (e.end > lastStart) continue;               // overlaps an edit already made: skip it
+    out = out.slice(0, e.start) + e.text + out.slice(e.end);
+    lastStart = e.start;
+  }
+  return out;
+}
+
+// ---------- declarations ----------
+function sigIndexes(toks) {
+  const sig = [];
+  toks.forEach(function (tk, idx) { if (!tk.pp && (tk.t === 'id' || tk.t === 'num' || tk.t === 'op')) sig.push(idx); });
+  return sig;
+}
+
+function scanDecls(toks, sig) {
+  const decls = [];
+  let depth = 0, paren = 0, stmtStart = true;
+  const tryDecl = function (k) {
+    let p = k, isConst = false;
+    while (p < sig.length && toks[sig[p]].t === 'id' && GL_QUALS[toks[sig[p]].s]) { if (toks[sig[p]].s === 'const') isConst = true; p++; }
+    if (p >= sig.length) return null;
+    const tt = toks[sig[p]];
+    if (tt.t !== 'id' || !GL_TYPES[tt.s]) return null;
+    const typeK = p; p++;
+    const nm = toks[sig[p]];
+    if (!nm || nm.t !== 'id') return null;
+    const after = toks[sig[p + 1]];
+    if (after && after.t === 'op' && after.s === '(') return null;       // a function, not a variable
+    let q = p, pd = 0, multi = false, hasArray = false, eq = -1;
+    for (; q < sig.length; q++) {
+      const s = toks[sig[q]];
+      if (s.t !== 'op') continue;
+      if (s.s === '[' && pd === 0) hasArray = true;
+      if (s.s === '(' || s.s === '[' || s.s === '{') pd++;
+      else if (s.s === ')' || s.s === ']' || s.s === '}') pd--;
+      else if (s.s === ',' && pd === 0) multi = true;
+      else if (s.s === '=' && pd === 0 && eq < 0) eq = q;
+      else if (s.s === ';' && pd === 0) break;
+    }
+    if (q >= sig.length) return null;
+    return { depth: depth, isConst: isConst, typeK: typeK, nameK: p, eqK: eq, endK: q, multi: multi, hasArray: hasArray, name: nm.s, type: tt.s, firstK: k };
+  };
+  for (let k = 0; k < sig.length; k++) {
+    const tk = toks[sig[k]];
+    if (stmtStart && paren === 0) {
+      const d = tryDecl(k);
+      if (d) { decls.push(d); k = d.endK; stmtStart = true; continue; }
+    }
+    stmtStart = false;
+    if (tk.t === 'op') {
+      if (tk.s === '{') { depth++; stmtStart = true; }
+      else if (tk.s === '}') { depth--; stmtStart = true; }
+      else if (tk.s === ';' && paren === 0) stmtStart = true;
+      else if (tk.s === '(') paren++;
+      else if (tk.s === ')') paren--;
+    }
+  }
+  return decls;
+}
+
+// ---------- finding the numbers that could become knobs ----------
+function analyse(text) {
+  const toks = tokenise(text);
+  const sig = sigIndexes(toks);
+  const decls = scanDecls(toks, sig);
+  const lines = text.split('\n');
+  const idents = {};
+  toks.forEach(function (tk) { if (tk.t === 'id') idents[tk.s] = true; });
+
+  const sigOf = {};                                   // token index -> position in sig
+  sig.forEach(function (idx, k) { sigOf[idx] = k; });
+  const declOf = {};                                  // token index -> declaration whose initialiser holds it
+  decls.forEach(function (d) {
+    if (d.eqK < 0) return;
+    for (let k = d.eqK + 1; k < d.endK; k++) declOf[sig[k]] = d;
+  });
+
+  const prevSig = function (idx) {                    // previous significant token (same preprocessor line)
+    for (let a = idx - 1; a >= 0; a--) { const t = toks[a]; if (t.t === 'ws' || t.t === 'comment') { if (t.s.indexOf('\n') >= 0 && !t.pp) return -1; continue; } return a; }
+    return -1;
+  };
+
+  const candidates = [];
+  toks.forEach(function (tk, idx) {
+    if (tk.t !== 'num' || !tk.isFloat) return;
+    if (tk.pp && tk.pp !== 'define') return;
+    let start = tk.i, value = parseFloat(String(tk.s).replace(/[fF]$/, ''));
+    const pi = prevSig(idx);
+    if (pi >= 0 && toks[pi].t === 'op' && toks[pi].s === '-') {
+      const p2 = prevSig(pi);
+      const t2 = p2 >= 0 ? toks[p2] : null;
+      const binary = t2 && (t2.t === 'num' || (t2.t === 'id' && !GL_KEYWORDS_BEFORE_UNARY[t2.s]) || (t2.t === 'op' && (t2.s === ')' || t2.s === ']')));
+      if (!binary) { start = toks[pi].i; value = -value; }
+    }
+    if (!isFinite(value)) return;
+    const c = { id: candidates.length, tokIdx: idx, start: start, end: tk.j, value: value, line: tk.line, kind: 'other', label: '', disabled: false, reason: '',
+      context: (lines[tk.line - 1] || '').trim().slice(0, 100) };
+
+    if (tk.pp === 'define' && tk.def) {
+      const body = toks.filter(function (t) { return t.pp === 'define' && t.def === tk.def && t.role !== 'macro' && t.t !== 'ws' && t.t !== 'comment'; });
+      const simple = body.length === 1 || (body.length === 2 && body[0].t === 'op' && body[0].s === '-');
+      c.kind = 'define'; c.label = simple ? tk.def : tk.def + ' (inside the macro)';
+    } else {
+      const d = declOf[idx];
+      if (d) {
+        c.kind = d.depth === 0 ? 'const' : 'var';
+        const init = [];
+        for (let k = d.eqK + 1; k < d.endK; k++) init.push(sig[k]);
+        const isNum = function (t) { return t.t === 'num'; };
+        // initialiser is just a number, or just a vector made of numbers
+        let label = d.name + ' (part of an expression)';
+        if (init.length === 1 || (init.length === 2 && toks[init[0]].s === '-' && isNum(toks[init[1]]))) label = d.name;
+        else if (toks[init[0]].t === 'id' && GL_TYPES[toks[init[0]].s] && toks[init[1]] && toks[init[1]].s === '(' && toks[init[init.length - 1]].s === ')') {
+          let pd = 0, item = 0, items = [[]];
+          for (let k = 2; k < init.length - 1; k++) {
+            const t = toks[init[k]];
+            if (t.s === '(') pd++; else if (t.s === ')') pd--;
+            if (t.s === ',' && pd === 0) { item++; items.push([]); continue; }
+            items[item].push(init[k]);
+          }
+          const simpleItems = items.every(function (it) { return it.length === 1 && isNum(toks[it[0]]) || (it.length === 2 && toks[it[0]].s === '-' && isNum(toks[it[1]])); });
+          if (simpleItems) {
+            const which = items.findIndex(function (it) { return it.indexOf(idx) >= 0; });
+            label = items.length > 1 && which >= 0 ? d.name + '.' + 'xyzw'.charAt(Math.min(which, 3)) : d.name;
+          }
+        }
+        c.label = label;
+        if (d.depth === 0 && (d.hasArray || d.multi)) { c.disabled = true; c.reason = 'This number is in a ' + (d.hasArray ? 'global array' : 'list of global variables') + ', which cannot be changed by a knob.'; }
+      }
+    }
+    candidates.push(c);
+  });
+  const globalIdents = {};
+  let bd = 0;
+  toks.forEach(function (tk) {
+    if (tk.role === 'macro') globalIdents[tk.s] = true;
+    if (tk.pp || tk.t === 'ws' || tk.t === 'comment') return;
+    if (tk.t === 'op') { if (tk.s === '{') bd++; else if (tk.s === '}') bd--; return; }
+    if (tk.t === 'id' && bd === 0) globalIdents[tk.s] = true;
+  });
+  return { toks: toks, sig: sig, decls: decls, candidates: candidates, idents: idents, globalIdents: globalIdents };
+}
+
+// ---------- the Shadertoy textures (iChannel0 to iChannel3) ----------
+const CHANNEL_CALLS = { texture: 'tex', texture2D: 'tex', textureLod: 'tex', texture2DLod: 'tex', texelFetch: 'texel', textureSize: 'size', textureGrad: 'tex' };
+
+function splitArgs(text, from, to) {                  // split text[from..to) at the commas that are not inside brackets
+  const out = []; let pd = 0, s = from;
+  for (let k = from; k < to; k++) {
+    const c = text[k];
+    if (c === '(' || c === '[' || c === '{') pd++;
+    else if (c === ')' || c === ']' || c === '}') pd--;
+    else if (c === ',' && pd === 0) { out.push([s, k]); s = k + 1; }
+  }
+  out.push([s, to]);
+  return out;
+}
+
+function rewriteChannelCallsOnce(text, sizes) {
+  const toks = tokenise(text);
+  const real = []; toks.forEach(function (tk, idx) { if (tk.t !== 'ws' && tk.t !== 'comment' && tk.t !== 'pp') real.push(idx); });
+  const edits = [];
+  for (let a = 0; a + 3 < real.length; a++) {
+    const f = toks[real[a]];
+    if (f.t !== 'id' || !CHANNEL_CALLS[f.s]) continue;
+    if (toks[real[a + 1]].s !== '(') continue;
+    const ch = toks[real[a + 2]];
+    const m = ch.t === 'id' ? /^iChannel([0-3])$/.exec(ch.s) : null;
+    if (!m) continue;
+    // find the matching close bracket
+    let pd = 0, close = -1;
+    for (let b = a + 1; b < real.length; b++) { const s = toks[real[b]].s; if (s === '(') pd++; else if (s === ')') { pd--; if (pd === 0) { close = b; break; } } }
+    if (close < 0) continue;
+    const firstComma = text.indexOf(',', ch.j);
+    const closeTok = toks[real[close]];
+    const n = m[1], kind = CHANNEL_CALLS[f.s];
+    let rep;
+    if (kind === 'size') rep = 'ivec2(' + sizes[n][0] + ', ' + sizes[n][1] + ')';
+    else {
+      if (firstComma < 0 || firstComma > closeTok.i) continue;
+      const args = splitArgs(text, firstComma + 1, closeTok.i);
+      const first = text.slice(args[0][0], args[0][1]).trim();
+      if (/iChannel[0-3]/.test(text.slice(firstComma + 1, closeTok.i))) continue;     // a nested channel call: do the inner one first
+      rep = (kind === 'tex' ? 'stTex' : 'stTexel') + n + '(' + first + ')';
+    }
+    edits.push({ start: f.i, end: closeTok.j, text: rep });
+  }
+  return { text: edits.length ? applyEdits(text, edits) : text, count: edits.length };
+}
+
+// returns the Shadertoy code with colliding names renamed and texture reads turned into function calls
+function prepare(source, channelSizes) {
+  const warnings = [];
+  let text = source;
+  const renames = [];
+  tokenise(text).forEach(function (tk) { if (tk.t === 'id' && VS2_NAMES.indexOf(tk.s) >= 0) renames.push({ start: tk.i, end: tk.j, text: 'st_' + tk.s }); });
+  if (renames.length) text = applyEdits(text, renames);
+  for (let pass = 0; pass < 20; pass++) {
+    const r = rewriteChannelCallsOnce(text, channelSizes);
+    text = r.text;
+    if (!r.count) break;
+  }
+  const left = [];
+  tokenise(text).forEach(function (tk) { if (tk.t === 'id' && /^iChannel[0-3]$/.test(tk.s) && left.indexOf(tk.line) < 0) left.push(tk.line); });
+  if (left.length) warnings.push('A texture channel is used in a way that cannot be converted (line ' + left.slice(0, 5).join(', ') + '). The Material will probably not compile there.');
+  return { text: text, warnings: warnings, renamed: renames.length > 0 };
+}
+
+// which of the iChannel textures does the code use, and are they used like the Shadertoy sound input?
+function channelInfo(source) {
+  const used = {};
+  const toks = tokenise(source);
+  toks.forEach(function (tk) { if (tk.t === 'id') { const m = /^iChannel([0-3])$/.exec(tk.s); if (m) used[m[1]] = true; } });
+  const guess = {};
+  Object.keys(used).forEach(function (n) {
+    const re = new RegExp('iChannel' + n + '\\s*,[^;]{0,80}?0?\\.(25|75)\\b');
+    guess[n] = re.test(source) ? 'audio' : 'noise';
+  });
+  return { used: used, guess: guess, hasMainImage: /void\s+mainImage\s*\(/.test(source) };
+}
+
+// ---------- turning the chosen numbers into knobs ----------
+function knobExpr(knobVar, value, def) {
+  if (value === def) return knobVar;
+  if (def !== 0 && value !== 0 && value / def > 0 && isFinite(value / def)) return '(' + knobVar + ' * ' + fnum(value / def) + ')';
+  const diff = value - def;
+  return '(' + knobVar + (diff < 0 ? ' - ' + fnum(-diff) : ' + ' + fnum(diff)) + ')';
+}
+
+// links: { candidateId: knobVariableExpression }  (already worked out)
+function rewriteSource(text, an, exprs) {
+  const warnings = [];
+  const toks = an.toks, sig = an.sig;
+  let edits = [];
+  const replaced = {};
+  an.candidates.forEach(function (c) {
+    if (exprs[c.id] === undefined || c.disabled) return;
+    edits.push({ start: c.start, end: c.end, text: exprs[c.id], tokIdx: c.tokIdx });
+    replaced[c.tokIdx] = true;
+  });
+  const dep = {};
+  const spacesAfter = function (pos) { let n = 0; while (text[pos + n] === ' ' || text[pos + n] === '\t') n++; return n; };
+  const dependent = function (idx) { const t = toks[idx]; return replaced[idx] || (t.t === 'id' && dep[t.s]); };
+
+  // macros that contain a changed number, or another changed macro
+  const macros = {};
+  toks.forEach(function (tk, idx) { if (tk.pp === 'define' && tk.def && tk.role !== 'macro' && tk.t !== 'ws' && tk.t !== 'comment') (macros[tk.def] = macros[tk.def] || []).push(idx); });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    Object.keys(macros).forEach(function (name) { if (!dep[name] && macros[name].some(dependent)) { dep[name] = true; changed = true; } });
+  }
+
+  // declarations whose starting value now depends on a knob: they can no longer be constants
+  const hoisted = [];
+  an.decls.forEach(function (d) {
+    if (d.eqK < 0) return;
+    let isDep = false;
+    for (let k = d.eqK + 1; k < d.endK; k++) if (dependent(sig[k])) { isDep = true; break; }
+    if (!isDep) return;
+    dep[d.name] = true;
+    const constTok = (function () { for (let k = d.firstK; k < d.typeK; k++) if (toks[sig[k]].s === 'const') return toks[sig[k]]; return null; })();
+    if (d.depth === 0) {
+      if (d.hasArray || d.multi) { warnings.push('"' + d.name + '" is a global ' + (d.hasArray ? 'array' : 'list') + ' that depends on a knob, which cannot be done. Unlink the numbers it uses.'); return; }
+      const eqTok = toks[sig[d.eqK]], endTok = toks[sig[d.endK]];
+      const inner = edits.filter(function (e) { return e.start >= eqTok.j && e.end <= endTok.i; });
+      const exprText = applyEdits(text.slice(eqTok.j, endTok.i), inner.map(function (e) { return { start: e.start - eqTok.j, end: e.end - eqTok.j, text: e.text }; })).trim();
+      edits = edits.filter(function (e) { return !(e.start >= eqTok.i && e.end <= endTok.i); });
+      edits.push({ start: toks[sig[d.nameK]].j, end: endTok.i, text: '' });
+      if (constTok) edits.push({ start: constTok.i, end: constTok.j + spacesAfter(constTok.j), text: '' });
+      hoisted.push(d.name + ' = ' + exprText + ';');
+    } else if (constTok) {
+      edits.push({ start: constTok.i, end: constTok.j + spacesAfter(constTok.j), text: '' });
+    }
+  });
+  return { text: applyEdits(text, edits), hoisted: hoisted, warnings: warnings };
+}
+
+// ---------- the Material ----------
+function identOk(s) { return /^[A-Za-z_][A-Za-z0-9_]*$/.test(s); }
+function niceName(label) {
+  let s = String(label || '').replace(/\(.*\)/, '').replace(/[^A-Za-z0-9_]+/g, ' ').trim();
+  if (!s) return '';
+  const words = s.split(/[\s_]+/).filter(function (w) { return w.length; }).map(function (w) { return w.length > 1 && w === w.toUpperCase() ? w.toLowerCase() : w; });
+  s = words.map(function (w, k) { return k ? w.charAt(0).toUpperCase() + w.slice(1) : w.charAt(0).toLowerCase() + w.slice(1); }).join('');
+  if (/^[0-9]/.test(s)) s = 'k' + s;
+  return s;
+}
+function defaultRange(v) {
+  if (v === 0) return [-1, 1];
+  return v > 0 ? [0, num6(v * 3)] : [num6(v * 3), 0];
+}
+function normDef(def, min, max) { if (!(max > min)) return 0; return Number(Math.min(1, Math.max(0, (def - min) / (max - min))).toFixed(4)); }
+
+const ST_DEFAULT_HZ = { bass: [40, 150], mid: [250, 2000], high: [4000, 12000], fftMin: 20, fftMax: 20000, log: true };
+
+/*
+  cfg = {
+    name, title, origAuthor, url, licence, converter, colour, speed, alphaMode ('opaque'|'black'|'shader'), tint (bool),
+    channels: { '0': 'audio'|'noise'|'black', ... },
+    slots: [ { name, min, max, def, links: [candidateId, ...], bass, mid, high } x7 ],     (links empty and no role = unused)
+    mouseX: slot index or -1, mouseY: slot index or -1,
+    reactSlot: 1..7, bright: {bass, mid, high}, hz: {...}, uuidP, uuidA
+  }
+*/
+function convertShader(source, common, cfg, audio) {
+  const warnings = [];
+  const fullSource = (common ? common.replace(/\s+$/, '') + '\n' : '') + source;
+  const info = channelInfo(fullSource);
+  if (!info.hasMainImage) return { error: 'No "void mainImage(" function was found. Paste the code from the Image tab of the Shadertoy shader.' };
+
+  const sizes = { 0: [512, 2], 1: [512, 2], 2: [512, 2], 3: [512, 2] };
+  ['0', '1', '2', '3'].forEach(function (n) { const t = cfg.channels && cfg.channels[n]; sizes[n] = t === 'audio' ? [512, 2] : t === 'black' ? [1, 1] : [256, 256]; });
+  const prep = prepare(fullSource, sizes);
+  warnings.push.apply(warnings, prep.warnings);
+  const an = analyse(prep.text);
+
+  // which of the knobs are in use
+  const slotsIn = [];
+  for (let k = 0; k < KNOB_SLOTS; k++) {
+    const s = (cfg.slots && cfg.slots[k]) || { links: [] };
+    const isMouse = cfg.mouseX === k || cfg.mouseY === k;
+    const links = (s.links || []).filter(function (id) { return an.candidates[id] && !an.candidates[id].disabled; });
+    if (links.length || isMouse) slotsIn.push({ slot: k, cfg: s, links: links, mouse: cfg.mouseX === k ? 'x' : cfg.mouseY === k ? 'y' : null });
+  }
+
+  // knob names: valid, unique, and different from everything in the shader
+  const taken = {}; VS2_NAMES.forEach(function (n) { taken[n] = true; });
+  Object.keys(an.globalIdents).forEach(function (n) { taken[n] = true; });
+  taken.react = true; ['bassLv', 'midLv', 'highLv', 'tm', 'fragCoord', 'outCol'].forEach(function (n) { taken[n] = true; });
+  const knobs = slotsIn.map(function (si) {
+    const first = si.links.length ? an.candidates[si.links[0]] : null;
+    let name = cleanText(si.cfg.name) || (si.mouse ? 'mouse' + si.mouse.toUpperCase() : niceName(first && first.label) || 'knob' + (si.slot + 1));
+    name = name.replace(/[^A-Za-z0-9_]/g, '');
+    if (!identOk(name)) name = 'knob' + (si.slot + 1);
+    let n2 = name, c = 2;
+    while (taken[n2]) { n2 = name + (c === 2 && !taken[name + 'Knob'] ? 'Knob' : c); c++; if (c > 50) break; }
+    taken[n2] = true;
+    let min, max, def;
+    if (si.mouse) { min = isFinite(si.cfg.min) ? si.cfg.min : 0; max = isFinite(si.cfg.max) ? si.cfg.max : 1; def = isFinite(si.cfg.def) ? si.cfg.def : 0.5; }
+    else {
+      const v0 = first ? first.value : 0;
+      const r = defaultRange(v0);
+      min = isFinite(si.cfg.min) ? si.cfg.min : r[0]; max = isFinite(si.cfg.max) ? si.cfg.max : r[1];
+      const tried = first && cfg.trialValues && isFinite(cfg.trialValues[first.id]) ? cfg.trialValues[first.id] : NaN;
+      def = isFinite(si.cfg.def) ? si.cfg.def : (isFinite(tried) ? tried : v0);
+    }
+    if (!(max > min)) max = min + 1;
+    def = Math.min(max, Math.max(min, def));
+    return { slot: si.slot, name: n2, v: 'vk_' + n2, min: num6(min), max: num6(max), def: num6(def), links: si.links, mouse: si.mouse,
+      bass: Number(si.cfg.bass) || 0, mid: Number(si.cfg.mid) || 0, high: Number(si.cfg.high) || 0 };
+  });
+
+  // numbers being tried in the preview get a temporary knob each (they are not part of the seven)
+  const tryKnobs = [];
+  if (cfg.previewOnly && cfg.tries) {
+    const linkedIds = {};
+    knobs.forEach(function (kb) { kb.links.forEach(function (id) { linkedIds[id] = true; }); });
+    Object.keys(cfg.tries).forEach(function (key) {
+      const id = Number(key), c = an.candidates[id], val = Number(cfg.tries[key]);
+      if (!c || c.disabled || linkedIds[id] || !isFinite(val)) return;
+      const r = defaultRange(c.value);
+      const lo = Math.min(r[0], val), hi = Math.max(r[1], val);
+      tryKnobs.push({ slot: -1, temp: true, name: 'vs2try_' + id, v: 'vk_vs2try_' + id, min: num6(lo), max: num6(hi > lo ? hi : lo + 1), def: num6(val), links: [id], mouse: null, bass: 0, mid: 0, high: 0 });
+    });
+  }
+
+  // the audio version needs a place for the react knob
+  let list = knobs.slice();
+  let reactAt = -1;
+  const constants = [];                                  // knobs that lose their slot in the audio version become constants
+  if (audio) {
+    const want = Math.min(Math.max((parseInt(cfg.reactSlot, 10) || 5) - 1, 0), 6);
+    if (list.length < KNOB_SLOTS) {
+      reactAt = Math.min(want, list.length);
+      list.splice(reactAt, 0, { react: true });
+    } else {
+      const lost = list[want]; constants.push(lost);
+      list[want] = { react: true }; reactAt = want;
+    }
+  }
+
+  const params = list.concat(tryKnobs).map(function (kb) {
+    if (kb.react) { const rm = (cfg.reactMax > 0 ? cfg.reactMax : 4); return { default: normDef(cfg.reactDef !== undefined ? cfg.reactDef : 2, 0, rm), name: 'react', min: 0, max: rm }; }
+    const p = { default: normDef(kb.def, kb.min, kb.max), name: kb.name, min: kb.min, max: kb.max };
+    if (kb.temp) p.temp = true;
+    return p;
+  });
+
+  // the changed numbers
+  const exprs = {};
+  knobs.forEach(function (kb) {
+    if (!kb.links.length) return;                      // a mouse knob has no numbers
+    const anchor = an.candidates[kb.links[0]].value;
+    kb.links.forEach(function (id) { exprs[id] = knobExpr(kb.v, an.candidates[id].value, anchor); });
+  });
+  tryKnobs.forEach(function (kb) { exprs[kb.links[0]] = kb.v; });
+  const rw = rewriteSource(prep.text, an, exprs);
+  warnings.push.apply(warnings, rw.warnings);
+
+  const uses = function (n) { return !!an.idents[n]; };
+  const chUsed = {}; (function () { const t = tokenise(prep.text); t.forEach(function (tk) { const m = tk.t === 'id' ? /^stTex(?:el)?([0-3])$/.exec(tk.s) : null; if (m) chUsed[m[1]] = true; }); })();
+  const needNoise = Object.keys(chUsed).some(function (n) { return (cfg.channels && cfg.channels[n]) === 'noise' || !(cfg.channels && cfg.channels[n]); });
+  const needAudioTex = Object.keys(chUsed).some(function (n) { return (cfg.channels && cfg.channels[n]) === 'audio'; });
+
+  const hz = cfg.hz || ST_DEFAULT_HZ;
+  const L = [];
+  const man = {
+    author: cleanText(cfg.origAuthor ? 'Original: ' + cfg.origAuthor + (cfg.converter ? '. Converted by: ' + cfg.converter : '') : (cfg.converter || '')),
+    color: cleanText(cfg.colour) || 'white', movement: true, parameters: params, url: cleanText(cfg.url), uuid: audio ? cfg.uuidA : cfg.uuidP
+  };
+  L.push('/*\n' + JSON.stringify(man, null, 4) + '\n*/');
+  L.push('');
+  L.push('// ' + (cleanText(cfg.title) || cleanText(cfg.name) || 'Shadertoy shader') + (audio ? ' (audio-reactive)' : '') + ': a Shadertoy shader converted to a VS2 Material.');
+  if (cfg.origAuthor || cfg.url) L.push('// Original: ' + (cleanText(cfg.title) || 'untitled') + (cfg.origAuthor ? ' by ' + cleanText(cfg.origAuthor) : '') + (cfg.url ? ', ' + cleanText(cfg.url) : ''));
+  L.push('// Licence: ' + (cleanText(cfg.licence) || 'not stated. Check the shader\'s page on Shadertoy before sharing this file.'));
+  L.push('// Converted with the Shadertoy to VS2 Material converter' + (cfg.converter ? ' by ' + cleanText(cfg.converter) : '') + '. Keep this credit if you share the file.');
+  L.push('');
+  L.push('#ifdef GL_ES');
+  L.push('precision highp float;');
+  L.push('#endif');
+  L.push('');
+  L.push('// Overall animation speed multiplier (1.0 runs at the speed of the original). VS2\'s Speed knob still scales on top.');
+  L.push('const float SPEED_SCALE = ' + fnum(cfg.speed === undefined ? 8 : cfg.speed) + ';');
+  L.push('');
+  if (audio) {
+    L.push('// The frequency range of each audio band, in Hz.');
+    L.push('const vec2 BASS_HZ = vec2(' + fnum(hz.bass[0]) + ', ' + fnum(hz.bass[1]) + ');');
+    L.push('const vec2 MID_HZ  = vec2(' + fnum(hz.mid[0]) + ', ' + fnum(hz.mid[1]) + ');');
+    L.push('const vec2 HIGH_HZ = vec2(' + fnum(hz.high[0]) + ', ' + fnum(hz.high[1]) + ');');
+    L.push('');
+    L.push('// How VS2 lays out the FFT texture. VS2 does not document this, so these are assumptions:');
+    L.push('// the left edge is FFT_MIN_HZ, the right edge is FFT_MAX_HZ, and the frequencies in between are');
+    L.push('// spaced logarithmically (FFT_LOG = 1.0) or evenly (FFT_LOG = 0.0). FFT_MIN_HZ must be above 0.');
+    L.push('const float FFT_MIN_HZ = ' + fnum(hz.fftMin) + ';');
+    L.push('const float FFT_MAX_HZ = ' + fnum(hz.fftMax) + ';');
+    L.push('const float FFT_LOG = ' + (hz.log ? '1.0' : '0.0') + ';');
+    L.push('');
+    L.push('float hzToX(float hz)');
+    L.push('{');
+    L.push('    float h = clamp(hz, FFT_MIN_HZ, FFT_MAX_HZ);');
+    L.push('    float lin = (h - FFT_MIN_HZ) / (FFT_MAX_HZ - FFT_MIN_HZ);');
+    L.push('    float lg = log(h / FFT_MIN_HZ) / log(FFT_MAX_HZ / FFT_MIN_HZ);');
+    L.push('    return mix(lin, lg, FFT_LOG);');
+    L.push('}');
+    L.push('');
+    L.push('// average level of the FFT over a range of frequencies, given in Hz');
+    L.push('float band(vec2 hz)');
+    L.push('{');
+    L.push('    float x0 = hzToX(hz.x);');
+    L.push('    float x1 = hzToX(hz.y);');
+    L.push('    float sum = 0.0;');
+    L.push('    for (int i = 0; i < 4; i++)');
+    L.push('    {');
+    L.push('        float x = mix(x0, x1, (float(i) + 0.5) / 4.0);');
+    L.push('        sum += texture(fftTex, vec2(x, 0.0)).r;');
+    L.push('    }');
+    L.push('    return sum / 4.0;');
+    L.push('}');
+    L.push('');
+  }
+  // the values the Shadertoy code expects to find
+  L.push('// ---- what a Shadertoy shader expects to find ----');
+  if (uses('iResolution')) L.push('vec3 iResolution;');
+  if (uses('iTime')) L.push('float iTime;');
+  if (uses('iTimeDelta')) L.push('float iTimeDelta;');
+  if (uses('iFrame')) L.push('int iFrame;');
+  if (uses('iFrameRate')) L.push('float iFrameRate;');
+  if (uses('iMouse')) L.push('vec4 iMouse;');
+  if (uses('iDate')) L.push('vec4 iDate;');
+  if (uses('iSampleRate')) L.push('float iSampleRate;');
+  if (uses('iChannelTime')) L.push('float iChannelTime[4];');
+  if (uses('iChannelResolution')) L.push('vec3 iChannelResolution[4];');
+  if (!uses('iTime')) L.push('float iTime;');           // the helpers below may use it
+  const allKnobs = knobs.concat(tryKnobs);
+  allKnobs.forEach(function (kb) { L.push('float ' + kb.v + ';'); });
+  L.push('');
+
+  if (needNoise) {
+    L.push('// stands in for a Shadertoy noise texture: random values on a 256 by 256 grid, smoothly blended');
+    L.push('vec4 stHash4(vec2 p)');
+    L.push('{');
+    L.push('    vec4 q = vec4(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)), dot(p, vec2(419.2, 371.9)), dot(p, vec2(113.5, 271.9)));');
+    L.push('    return fract(sin(q) * 43758.5453);');
+    L.push('}');
+    L.push('vec4 stNoise(vec2 uv)');
+    L.push('{');
+    L.push('    vec2 p = uv * 256.0;');
+    L.push('    vec2 i = floor(p);');
+    L.push('    vec2 f = fract(p);');
+    L.push('    vec4 a = stHash4(mod(i, 256.0));');
+    L.push('    vec4 b = stHash4(mod(i + vec2(1.0, 0.0), 256.0));');
+    L.push('    vec4 c = stHash4(mod(i + vec2(0.0, 1.0), 256.0));');
+    L.push('    vec4 d = stHash4(mod(i + vec2(1.0, 1.0), 256.0));');
+    L.push('    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);');
+    L.push('}');
+    L.push('');
+  }
+  if (needAudioTex) {
+    L.push('// stands in for the Shadertoy sound texture: the top row (y = 0.25) is the spectrum from 0 to 22 kHz,');
+    L.push('// the bottom row (y = 0.75) is the waveform. VS2 gives no waveform, so that row is an approximation.');
+    L.push('float stAudioLevel(float x)');
+    L.push('{');
+    if (audio) L.push('    return clamp(texture(fftTex, vec2(hzToX(x * 22050.0), 0.0)).r * react * 0.5, 0.0, 1.0);');
+    else L.push('    return 0.3 * exp(-x * 3.0) * (0.6 + 0.4 * sin(x * 40.0 + iTime * 2.0));      // no audio in the plain version: a slow made-up spectrum');
+    L.push('}');
+    L.push('vec4 stAudioTex(vec2 uv)');
+    L.push('{');
+    L.push('    float lvl = stAudioLevel(uv.x);');
+    L.push('    if (uv.y < 0.5) return vec4(lvl, lvl, lvl, 1.0);');
+    L.push('    float w = 0.5 + 0.5 * lvl * sin(uv.x * 300.0 + iTime * 12.0);');
+    L.push('    return vec4(w, w, w, 1.0);');
+    L.push('}');
+    L.push('');
+  }
+  Object.keys(chUsed).forEach(function (n) {
+    const t = (cfg.channels && cfg.channels[n]) || 'noise';
+    L.push('// texture channel ' + n + ': ' + (t === 'audio' ? 'sound' : t === 'black' ? 'nothing (black)' : 'noise'));
+    if (t === 'audio') {
+      L.push('vec4 stTex' + n + '(vec2 uv) { return stAudioTex(uv); }');
+      L.push('vec4 stTexel' + n + '(ivec2 p) { return stAudioTex(vec2((float(p.x) + 0.5) / 512.0, p.y == 0 ? 0.25 : 0.75)); }');
+    } else if (t === 'black') {
+      L.push('vec4 stTex' + n + '(vec2 uv) { return vec4(0.0); }');
+      L.push('vec4 stTexel' + n + '(ivec2 p) { return vec4(0.0); }');
+    } else {
+      L.push('vec4 stTex' + n + '(vec2 uv) { return stNoise(uv); }');
+      L.push('vec4 stTexel' + n + '(ivec2 p) { return stHash4(mod(vec2(p), 256.0)); }');
+    }
+    L.push('vec4 stTex' + n + '(vec3 d) { return vec4(0.0); }');
+  });
+  if (Object.keys(chUsed).length) L.push('');
+
+  L.push('// ---- the Shadertoy code ----');
+  L.push(rw.text.replace(/\s+$/, ''));
+  L.push('');
+  L.push('// ---- the wrapper that runs it in VS2 ----');
+  L.push('void main()');
+  L.push('{');
+  L.push('    float tm = time * SPEED_SCALE;');
+  if (audio) {
+    L.push('');
+    L.push('    // audio: three bands, scaled by react and kept in 0..1');
+    L.push('    float bassLv = clamp(band(BASS_HZ) * react, 0.0, 1.0);');
+    L.push('    float midLv  = clamp(band(MID_HZ)  * react, 0.0, 1.0);');
+    L.push('    float highLv = clamp(band(HIGH_HZ) * react, 0.0, 1.0);');
+  }
+  L.push('');
+  if (allKnobs.length) {
+    L.push(audio ? '    // the knobs, with the audio reactions. The number in front of bassLv, midLv or highLv is how strongly that band moves the knob' : '    // the knobs');
+    if (audio) L.push('    // (1.0 moves it a quarter of its range); change it, or delete the term to switch the reaction off.');
+    allKnobs.forEach(function (kb) {
+      if (audio && constants.indexOf(kb) >= 0) { L.push('    ' + kb.v + ' = ' + fnum(kb.def) + ';        // ' + kb.name + ' has no knob in this version'); return; }
+      let drive = null;
+      if (audio) {
+        const terms = [];
+        [['bass', 'bassLv'], ['mid', 'midLv'], ['high', 'highLv']].forEach(function (b) { const k = kb[b[0]]; if (k) terms.push((k === 1 ? '' : fnum(k) + ' * ') + b[1]); });
+        if (terms.length) drive = terms.length > 1 ? '(' + terms.join(' + ') + ')' : terms[0];
+      }
+      if (drive) L.push('    ' + kb.v + ' = clamp(' + kb.name + ' + 0.25 * ' + fnum(kb.max - kb.min) + ' * ' + drive + ', ' + fnum(kb.min) + ', ' + fnum(kb.max) + ');');
+      else L.push('    ' + kb.v + ' = ' + kb.name + ';');
+    });
+    L.push('');
+  }
+  L.push('    iTime = tm;');
+  L.push('    vec2 fragCoord = texCoord * resolution;');
+  if (uses('iResolution')) L.push('    iResolution = vec3(resolution, 1.0);');
+  if (uses('iTimeDelta')) L.push('    iTimeDelta = 1.0 / 60.0;');
+  if (uses('iFrame')) L.push('    iFrame = int(tm * 60.0);');
+  if (uses('iFrameRate')) L.push('    iFrameRate = 60.0;');
+  if (uses('iSampleRate')) L.push('    iSampleRate = 44100.0;');
+  if (uses('iDate')) L.push('    iDate = vec4(2025.0, 6.0, 15.0, mod(tm, 86400.0));');
+  if (uses('iChannelTime')) L.push('    for (int k = 0; k < 4; k++) iChannelTime[k] = tm;');
+  if (uses('iChannelResolution')) L.push('    iChannelResolution[0] = vec3(' + sizes[0][0] + '.0, ' + sizes[0][1] + '.0, 1.0); iChannelResolution[1] = vec3(' + sizes[1][0] + '.0, ' + sizes[1][1] + '.0, 1.0); iChannelResolution[2] = vec3(' + sizes[2][0] + '.0, ' + sizes[2][1] + '.0, 1.0); iChannelResolution[3] = vec3(' + sizes[3][0] + '.0, ' + sizes[3][1] + '.0, 1.0);');
+  if (uses('iMouse')) {
+    const mx = knobs.filter(function (k) { return k.mouse === 'x'; })[0], my = knobs.filter(function (k) { return k.mouse === 'y'; })[0];
+    if (mx || my) {
+      L.push('    // the mouse comes from knobs: 0 to 1 across and up the screen, and it counts as pressed');
+      L.push('    iMouse = vec4(' + (mx ? mx.v : '0.5') + ' * resolution.x, ' + (my ? my.v : '0.5') + ' * resolution.y, ' + (mx ? mx.v : '0.5') + ' * resolution.x, ' + (my ? my.v : '0.5') + ' * resolution.y);');
+    } else L.push('    iMouse = vec4(0.0);');
+  }
+  rw.hoisted.forEach(function (h) { L.push('    ' + h); });
+  L.push('');
+  L.push('    vec4 outCol = vec4(0.0, 0.0, 0.0, 1.0);');
+  L.push('    mainImage(outCol, fragCoord);');
+  if (audio && (cfg.bright && (cfg.bright.bass || cfg.bright.mid || cfg.bright.high))) {
+    const terms = [];
+    [['bass', 'bassLv'], ['mid', 'midLv'], ['high', 'highLv']].forEach(function (b) { const k = Number(cfg.bright[b[0]]) || 0; if (k > 0) terms.push((k === 1 ? '' : fnum(k) + ' * ') + b[1]); });
+    if (terms.length) L.push('    outCol.rgb *= 1.0 + 1.5 * ' + (terms.length > 1 ? '(' + terms.join(' + ') + ')' : terms[0]) + ';        // the picture flashes brighter with the music');
+  }
+  L.push('');
+  const tint = cfg.tint ? ' * color.rgb' : '';
+  if (cfg.alphaMode === 'black') {
+    L.push('    // black counts as see-through, so the layer below shows');
+    L.push('    vec3 finalColor = clamp(outCol.rgb, 0.0, 1.0);');
+    L.push('    float coloredPixels = dot(finalColor, vec3(1.0));');
+    L.push('    fragColor = vec4(finalColor' + tint + ', alpha * clamp(coloredPixels, 0.0, 1.0));');
+  } else if (cfg.alphaMode === 'shader') {
+    L.push('    fragColor = vec4(clamp(outCol.rgb, 0.0, 1.0)' + tint + ', alpha * clamp(outCol.a, 0.0, 1.0));');
+  } else {
+    L.push('    fragColor = vec4(clamp(outCol.rgb, 0.0, 1.0)' + tint + ', alpha);');
+  }
+  L.push('}');
+  L.push('');
+  const code = L.join('\n').replace(/\n\n\n+/g, '\n\n');
+  return { code: code, params: params, warnings: warnings, knobs: allKnobs };
+}
+
+/* CORE-END */
+
+/* UI-START */
+(function () {
+  if (typeof document === 'undefined') return;
+  const $ = function (id) { return document.getElementById(id); };
+
+  const EXAMPLES = {
+    plasma: '#define SPEED 1.5\nconst float SCALE = 8.0;\nconst float SCALE2 = SCALE * 2.0;\n\nvec3 palette(float t) { return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67))); }\n\nvoid mainImage( out vec4 fragColor, in vec2 fragCoord )\n{\n    vec2 uv = fragCoord / iResolution.xy;\n    float t = iTime * SPEED;\n    float v = sin(uv.x * SCALE + t) + sin(uv.y * SCALE2 - t) + sin((uv.x + uv.y) * 10.0 + t * 0.5);\n    float strength = 0.75;\n    fragColor = vec4(palette(v * 0.25 + t * 0.1) * strength, 1.0);\n}\n',
+    rings: '#define RINGS 12.0\n#define SPEED 0.6\nconst float SHARPNESS = 0.08;\n\nvoid mainImage( out vec4 fragColor, in vec2 fragCoord )\n{\n    vec2 p = (fragCoord - 0.5 * iResolution.xy) / iResolution.y;\n    float r = length(p);\n    float a = atan(p.y, p.x);\n    float v = sin(r * RINGS * 6.2831 - iTime * SPEED * 6.0 + sin(a * 3.0) * 0.5);\n    float line = smoothstep(SHARPNESS, 0.0, abs(v) * 0.5);\n    vec3 col = mix(vec3(0.05, 0.0, 0.2), vec3(1.0, 0.3, 0.7), line) + 0.2 * vec3(0.0, 0.5, 1.0) * (1.0 - r);\n    fragColor = vec4(col, 1.0);\n}\n',
+    bars: 'void mainImage( out vec4 fragColor, in vec2 fragCoord )\n{\n    vec2 uv = fragCoord.xy / iResolution.xy;\n    float fft = texture( iChannel0, vec2(uv.x, 0.25) ).x;\n    float wave = texture( iChannel0, vec2(uv.x, 0.75) ).x;\n    float bar = step(uv.y, fft);\n    float line = smoothstep(0.02, 0.0, abs(uv.y - wave));\n    vec3 col = vec3(bar * uv.x, bar * (1.0 - uv.x), line);\n    fragColor = vec4(col, 1.0);\n}\n'
+  };
+
+  const state = { an: null, anKey: '', links: {}, linkSig: {}, tries: {}, trySig: {}, tryOrder: [], slots: [], chanKey: '', plain: null, audio: null, pvPlain: null, pvAudio: null, values: {}, fftMap: null, knobs: [] };
+  window.__vs2state = state;
+  for (let k = 0; k < KNOB_SLOTS; k++) state.slots.push({ touched: {}, name: '', min: NaN, max: NaN, def: NaN, bass: 0, mid: 0, high: 0 });
+
+  function uuid() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    const h = '0123456789abcdef'; let s = '';
+    for (let i = 0; i < 36; i++) {
+      if (i === 8 || i === 13 || i === 18 || i === 23) s += '-';
+      else if (i === 14) s += '4';
+      else if (i === 19) s += h[8 + Math.floor(Math.random() * 4)];
+      else s += h[Math.floor(Math.random() * 16)];
+    }
+    return s;
+  }
+  function numVal(id, fallback) { const v = parseFloat($(id).value); return isFinite(v) ? v : fallback; }
+  function slug() {
+    const s = String($('mName').value || '').replace(/[\\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^[\s.]+|[\s.]+$/g, '').slice(0, 100);
+    return s || 'shadertoy_shader';
+  }
+  function showFileNames() { $('fnHint').textContent = 'Files will be saved as "' + slug() + '.frag" and "' + slug() + '_audio.frag".'; }
+  function setStatus(el, text, kind) { el.textContent = text; el.className = 'status' + (kind ? ' ' + kind : ''); }
+  function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+  // ---------- remembering your name (a cookie, only if the box is ticked) ----------
+  const COOKIE = 'vs2conv_author';
+  function getCookie() {
+    const m = document.cookie.split('; ').filter(function (c) { return c.indexOf(COOKIE + '=') === 0; })[0];
+    if (!m) return null;
+    try { return decodeURIComponent(m.slice(COOKIE.length + 1)); } catch (e) { return null; }
+  }
+  function saveAuthor() {
+    const on = $('rememberAuthor').checked;
+    const secure = location.protocol === 'https:' ? '; Secure' : '';
+    if (on) document.cookie = COOKIE + '=' + encodeURIComponent($('mAuthor').value) + '; max-age=31536000; path=/; SameSite=Lax' + secure;
+    else document.cookie = COOKIE + '=; max-age=0; path=/; SameSite=Lax' + secure;
+    if (on && getCookie() === null && $('mAuthor').value) setStatus($('outMsg'), 'This browser is not keeping cookies for this page (it may have been opened from a file), so your name will not be remembered.', 'warn');
+  }
+
+  // ---------- reading the page ----------
+  function fullSource() {
+    const c = $('commonText').value;
+    return (c ? c.replace(/\s+$/, '') + '\n' : '') + $('srcText').value;
+  }
+  function chType(n) { const el = $('ch' + n); return el ? el.value : 'noise'; }
+  function channelsCfg() { const o = {}; ['0', '1', '2', '3'].forEach(function (n) { o[n] = chType(n); }); return o; }
+  function channelSizes() {
+    const sz = {};
+    ['0', '1', '2', '3'].forEach(function (n) { const t = chType(n); sz[n] = t === 'audio' ? [512, 2] : t === 'black' ? [1, 1] : [256, 256]; });
+    return sz;
+  }
+  function readHz() {
+    let fmin = Math.max(1, numVal('fftMin', 20)), fmax = numVal('fftMax', 20000);
+    if (!(fmax > fmin)) fmax = fmin * 2;
+    const pair = function (loId, hiId, dLo, dHi) {
+      let lo = numVal(loId, dLo), hi = numVal(hiId, dHi);
+      lo = clamp(lo, fmin, fmax); hi = clamp(hi, fmin, fmax);
+      if (hi < lo) { const t = lo; lo = hi; hi = t; }
+      if (hi === lo) hi = Math.min(fmax, lo * 1.5 + 1);
+      return [lo, hi];
+    };
+    return { bass: pair('bassLo', 'bassHi', 40, 150), mid: pair('midLo', 'midHi', 250, 2000), high: pair('highLo', 'highHi', 4000, 12000), fftMin: fmin, fftMax: fmax, log: $('fftScale').value === 'log' };
+  }
+  function readCfg() {
+    const slots = state.slots.map(function (s, k) {
+      const links = Object.keys(state.links).filter(function (id) { return state.links[id] === k; }).map(Number).sort(function (a, b) { return a - b; });
+      return { name: s.touched.name ? s.name : '', min: s.touched.min ? s.min : NaN, max: s.touched.max ? s.max : NaN, def: s.touched.def ? s.def : NaN,
+        links: links, bass: s.bass, mid: s.mid, high: s.high };
+    });
+    const slotOf = function (id) { const v = parseInt($(id).value, 10); return isFinite(v) ? v - 1 : -1; };
+    let rmax = numVal('reactMax', 4); if (!(rmax > 0)) rmax = 4;
+    return {
+      name: $('mName').value, title: $('cTitle').value, origAuthor: $('cAuthor').value, url: $('cUrl').value, licence: $('cLicence').value,
+      converter: $('mAuthor').value, colour: $('mColour').value, speed: clamp(numVal('mSpeed', 8), 0.1, 100),
+      alphaMode: $('alphaMode').value, tint: $('tint').checked, channels: channelsCfg(), slots: slots,
+      mouseX: slotOf('mouseX'), mouseY: slotOf('mouseY'), reactSlot: parseInt($('reactSlot').value, 10) || 5,
+      reactDef: clamp(numVal('reactDef', 2), 0, rmax), reactMax: rmax, trialValues: state.tries,
+      bright: { bass: clamp(numVal('brBass', 0), 0, 3), mid: clamp(numVal('brMid', 0), 0, 3), high: clamp(numVal('brHigh', 0), 0, 3) },
+      hz: readHz(), uuidP: $('uuidP').value || uuid(), uuidA: $('uuidA').value || uuid()
+    };
+  }
+
+  // ---------- the texture channels ----------
+  function buildChannels(info) {
+    const key = Object.keys(info.used).sort().join(',');
+    if (key === state.chanKey) return;
+    state.chanKey = key;
+    const box = $('chanRows'); box.innerHTML = '';
+    Object.keys(info.used).sort().forEach(function (n) {
+      const wrap = document.createElement('div'); wrap.className = 'row'; wrap.style.alignItems = 'center';
+      const lab = document.createElement('label'); lab.setAttribute('for', 'ch' + n); lab.textContent = 'iChannel' + n + ' should be'; lab.style.margin = '0';
+      const sel = document.createElement('select'); sel.id = 'ch' + n; sel.className = 'setting';
+      [['audio', 'Sound (the audio version reads VS2\'s FFT; the plain version gets a made-up spectrum)'], ['noise', 'Random noise'], ['black', 'Nothing (black)']].forEach(function (o) {
+        const op = document.createElement('option'); op.value = o[0]; op.textContent = o[1]; sel.appendChild(op);
+      });
+      sel.value = info.guess[n] || 'noise';
+      sel.addEventListener('input', schedule); sel.addEventListener('change', schedule);
+      wrap.appendChild(lab); wrap.appendChild(sel); box.appendChild(wrap);
+    });
+    $('chanSection').hidden = !Object.keys(info.used).length;
+  }
+
+  // ---------- the numbers ----------
+  function tidy(s) { return String(s).replace(/\bst_(time|resolution|color|alpha|texCoord|fftTex|fragColor)\b/g, '$1'); }
+  const MAX_TRIES = 8;
+  const has = function (o, k) { return Object.prototype.hasOwnProperty.call(o, k); };
+  function dropTry(id) {
+    delete state.tries[id]; delete state.trySig[id]; delete state.values['vs2try_' + id];
+    state.tryOrder = state.tryOrder.filter(function (x) { return x !== id; });
+  }
+  function setTry(id, v) {
+    const armed = has(state.tries, id);
+    state.tries[id] = v;
+    const c = state.an && state.an.candidates[id];
+    state.trySig[id] = c ? num6(c.value) + '|' + c.label : '';
+    state.values['vs2try_' + id] = v;
+    if (!armed) {
+      state.tryOrder.push(id);
+      let dropped = false;
+      while (state.tryOrder.length > MAX_TRIES) { dropTry(state.tryOrder[0]); dropped = true; }
+      if (dropped) renderCandidates();
+      schedule();            // the preview needs a new copy of the shader that has a control for this number
+    }
+  }
+  function renderCandidates() {
+    const an = state.an, body = $('candBody');
+    body.innerHTML = '';
+    if (!an) { $('candCount').textContent = ''; return; }
+    const all = $('candAll').checked, q = $('candFilter').value.trim().toLowerCase();
+    let shown = 0, matches = 0;
+    an.candidates.forEach(function (c) {
+      const linked = has(state.links, c.id);
+      const simple = c.kind !== 'other' && !/\((part of an expression|inside the macro)\)/.test(c.label);
+      const tried = has(state.tries, c.id);
+      if (!all && !simple && !linked && !tried) return;
+      const text = (tidy(c.label) + ' ' + tidy(c.context) + ' ' + c.value).toLowerCase();
+      if (q && text.indexOf(q) < 0 && !linked && !tried) return;
+      matches++;
+      if (shown >= 300) return;
+      shown++;
+      const what = !simple ? 'the number ' + num6(c.value) + ' on line ' + c.line : tidy(c.label);
+      const tr = document.createElement('tr');
+      if (tried) tr.className = 'tried';
+      const td1 = document.createElement('td'); td1.textContent = c.line; tr.appendChild(td1);
+      const td2 = document.createElement('td'); td2.className = simple ? '' : 'ctx'; td2.textContent = simple ? tidy(c.label) + (c.kind === 'define' ? '  (#define)' : '') : tidy(c.context);
+      if (c.disabled) { td2.className += ' dis'; td2.title = c.reason; }
+      tr.appendChild(td2);
+
+      // the number itself, as a slider you can drag to see what it does
+      const td3 = document.createElement('td'); td3.className = 'tryc';
+      const rng = defaultRange(c.value);
+      const cur = tried ? state.tries[c.id] : c.value;
+      const lo = Math.min(rng[0], cur), hi = Math.max(rng[1], cur);
+      const slider = document.createElement('input'); slider.type = 'range';
+      slider.min = String(lo); slider.max = String(hi); slider.step = String((hi - lo) / 300 || 0.01); slider.value = String(cur);
+      slider.disabled = !!c.disabled || linked;
+      slider.setAttribute('aria-label', 'Try other values for ' + what);
+      const out = document.createElement('output'); out.textContent = String(num6(cur));
+      const was = document.createElement('span'); was.className = 'was'; was.textContent = tried ? ' (was ' + num6(c.value) + ')' : '';
+      const rst = document.createElement('button'); rst.type = 'button'; rst.textContent = '\u21ba'; rst.title = 'Put the original value back';
+      rst.setAttribute('aria-label', 'Put the original value of ' + what + ' back'); rst.disabled = !tried;
+      slider.addEventListener('input', function () {
+        const v = parseFloat(slider.value);
+        setTry(c.id, v);
+        out.textContent = String(num6(v)); was.textContent = ' (was ' + num6(c.value) + ')'; rst.disabled = false; tr.className = 'tried';
+      });
+      rst.addEventListener('click', function () { dropTry(c.id); renderCandidates(); schedule(); });
+      td3.appendChild(slider); td3.appendChild(out); td3.appendChild(was); td3.appendChild(rst);
+      if (linked) td3.title = 'This number is on Knob ' + (state.links[c.id] + 1) + ': use that knob\'s slider in the preview.';
+      tr.appendChild(td3);
+
+      const td4 = document.createElement('td');
+      const sel = document.createElement('select');
+      sel.setAttribute('aria-label', 'Knob for ' + what);
+      const none = document.createElement('option'); none.value = ''; none.textContent = c.disabled ? 'not possible' : 'none'; sel.appendChild(none);
+      for (let k = 0; k < KNOB_SLOTS; k++) { const o = document.createElement('option'); o.value = String(k); o.textContent = 'Knob ' + (k + 1); sel.appendChild(o); }
+      sel.value = linked ? String(state.links[c.id]) : '';
+      sel.disabled = !!c.disabled;
+      sel.addEventListener('change', function () {
+        if (sel.value === '') { delete state.links[c.id]; delete state.linkSig[c.id]; }
+        else { state.links[c.id] = parseInt(sel.value, 10); state.linkSig[c.id] = num6(c.value) + '|' + c.label; }
+        renderCandidates();
+        refresh();
+      });
+      td4.appendChild(sel); tr.appendChild(td4);
+      body.appendChild(tr);
+    });
+    $('candCount').textContent = an.candidates.length ? ('Showing ' + shown + (matches > shown ? ' of ' + matches : '') + ' numbers' + (all ? '' : ' (' + an.candidates.length + ' in the code, most inside expressions: tick the box above to see them all)') + '.') : 'No decimal numbers were found in this code.';
+  }
+
+  // ---------- the knob table ----------
+  function buildKnobTable() {
+    const body = document.querySelector('#knobTable tbody'); body.innerHTML = '';
+    const mk = function (type, id, cls, onInput) {
+      const i = document.createElement('input'); i.type = type; i.id = id; if (cls) i.className = cls;
+      i.addEventListener('input', onInput); i.addEventListener('change', onInput); return i;
+    };
+    for (let k = 0; k < KNOB_SLOTS; k++) {
+      const tr = document.createElement('tr');
+      const c0 = document.createElement('td'); c0.textContent = k + 1; tr.appendChild(c0);
+      const nameI = mk('text', 'kn' + k, 'w', function () { state.slots[k].touched.name = true; state.slots[k].name = nameI.value; schedule(); });
+      nameI.maxLength = 30; nameI.style.maxWidth = '130px'; nameI.setAttribute('aria-label', 'Name of knob ' + (k + 1));
+      const tdN = document.createElement('td'); tdN.appendChild(nameI); tr.appendChild(tdN);
+      ['min', 'max', 'def'].forEach(function (f) {
+        const inp = mk('number', 'k' + f + k, 'w', function () {
+          const v = parseFloat(inp.value);
+          if (isFinite(v)) { state.slots[k].touched[f] = true; state.slots[k][f] = v; } else { delete state.slots[k].touched[f]; }
+          schedule();
+        });
+        inp.step = 'any'; inp.setAttribute('aria-label', f === 'min' ? 'Lowest value of knob ' + (k + 1) : f === 'max' ? 'Highest value of knob ' + (k + 1) : 'Starting value of knob ' + (k + 1));
+        const td = document.createElement('td'); td.appendChild(inp); tr.appendChild(td);
+      });
+      const cn = document.createElement('td'); cn.id = 'kc' + k; cn.textContent = '0'; tr.appendChild(cn);
+      [['bass', 'Bass'], ['mid', 'Mids'], ['high', 'Highs']].forEach(function (b) {
+        const inp = mk('number', 'ks' + b[0] + k, 'w', function () { const v = parseFloat(inp.value); state.slots[k][b[0]] = isFinite(v) ? clamp(v, -3, 3) : 0; schedule(); });
+        inp.min = '-3'; inp.max = '3'; inp.step = '0.1'; inp.value = '0'; inp.setAttribute('aria-label', b[1] + ' strength for knob ' + (k + 1));
+        const td = document.createElement('td'); td.appendChild(inp); tr.appendChild(td);
+      });
+      body.appendChild(tr);
+    }
+    ['mouseX', 'mouseY'].forEach(function (id) {
+      const sel = $(id); sel.innerHTML = '';
+      const none = document.createElement('option'); none.value = ''; none.textContent = 'none'; sel.appendChild(none);
+      for (let k = 1; k <= KNOB_SLOTS; k++) { const o = document.createElement('option'); o.value = String(k); o.textContent = 'Knob ' + k; sel.appendChild(o); }
+    });
+  }
+  // fill in the boxes you have not typed in yourself, from the numbers that are linked
+  function showKnobs(knobs) {
+    state.knobs = knobs || [];
+    for (let k = 0; k < KNOB_SLOTS; k++) {
+      const kb = state.knobs.filter(function (x) { return !x.temp && x.slot === k; })[0];
+      const s = state.slots[k];
+      [['name', 'kn' + k, kb ? kb.name : ''], ['min', 'kmin' + k, kb ? kb.min : ''], ['max', 'kmax' + k, kb ? kb.max : ''], ['def', 'kdef' + k, kb ? kb.def : '']].forEach(function (f) {
+        if (!s.touched[f[0]] && document.activeElement !== $(f[1])) $(f[1]).value = f[2];
+      });
+      $('kc' + k).textContent = kb ? (kb.mouse ? 'mouse' : kb.links.length) : '0';
+    }
+  }
+
+  // ---------- refresh ----------
+  let timer = null;
+  function schedule() { clearTimeout(timer); timer = setTimeout(refresh, 220); }
+
+  function refresh() {
+    showFileNames();
+    const src = $('srcText').value.trim();
+    if (!src) {
+      state.an = null; state.plain = state.audio = state.pvPlain = state.pvAudio = null; renderCandidates();
+      setStatus($('stats'), 'Paste or upload a shader to begin.', ''); $('warnList').innerHTML = '';
+      $('outPlain').value = ''; $('outAudio').value = ''; $('chanSection').hidden = true; state.chanKey = '';
+      Preview.set(null); return;
+    }
+    const full = fullSource();
+    const info = channelInfo(full);
+    buildChannels(info);
+    // analyse (the numbers you can turn into knobs)
+    const key = full + '|' + JSON.stringify(channelSizes());
+    if (key !== state.anKey) {
+      state.anKey = key;
+      try {
+        const prep = prepare(full, channelSizes());
+        state.an = analyse(prep.text);
+      } catch (e) { state.an = null; }
+      // keep the numbers you were trying where they are still there
+      state.tryOrder.slice().forEach(function (id) {
+        const c = state.an && state.an.candidates[id];
+        if (!(c && state.trySig[id] === num6(c.value) + '|' + c.label)) dropTry(id);
+      });
+      // keep the knobs you chose where the same number is still there
+      const keep = {}, keepSig = {};
+      if (state.an) Object.keys(state.links).forEach(function (id) {
+        const c = state.an.candidates[id];
+        if (c && state.linkSig[id] === num6(c.value) + '|' + c.label) { keep[id] = state.links[id]; keepSig[id] = state.linkSig[id]; }
+      });
+      state.links = keep; state.linkSig = keepSig;
+      renderCandidates();
+    }
+    const cfg = readCfg();
+    let rp, ra;
+    try { rp = convertShader($('srcText').value, $('commonText').value, cfg, false); ra = convertShader($('srcText').value, $('commonText').value, cfg, true); }
+    catch (e) { rp = ra = { error: 'Something went wrong converting that shader: ' + e.message }; }
+    const warn = $('warnList'); warn.innerHTML = '';
+    if (rp.error) {
+      setStatus($('stats'), rp.error, 'bad'); state.plain = state.audio = state.pvPlain = state.pvAudio = null;
+      $('outPlain').value = ''; $('outAudio').value = ''; showKnobs([]); Preview.set(null); return;
+    }
+    const nl = Object.keys(state.links).length;
+    setStatus($('stats'), 'Converted. ' + (state.an ? state.an.candidates.length : 0) + ' decimal numbers found, ' + nl + ' linked to knobs, ' + rp.params.length + ' knob' + (rp.params.length === 1 ? '' : 's') + ' in the plain Material.', rp.warnings.length ? 'warn' : 'ok');
+    rp.warnings.forEach(function (w) { const li = document.createElement('li'); li.textContent = w; warn.appendChild(li); });
+    $('uuidP').value = cfg.uuidP; $('uuidA').value = cfg.uuidA;
+    state.plain = rp; state.audio = ra; state.fftMap = cfg.hz;
+    // the preview's copy has a temporary knob for every number being tried; the downloads never do
+    let pvp = rp, pva = ra;
+    if (Object.keys(state.tries).length) {
+      try {
+        const cfgPv = Object.assign({}, cfg, { previewOnly: true, tries: state.tries });
+        const a1 = convertShader($('srcText').value, $('commonText').value, cfgPv, false), a2 = convertShader($('srcText').value, $('commonText').value, cfgPv, true);
+        if (!a1.error && !a2.error) { pvp = a1; pva = a2; }
+      } catch (e) { /* the preview just shows the plain conversion */ }
+    }
+    state.pvPlain = pvp; state.pvAudio = pva;
+    $('outPlain').value = rp.code; $('outAudio').value = ra.code;
+    showKnobs(rp.knobs);
+    Preview.set(state);
+  }
+
+  // ---------- live preview (WebGL2) ----------
+  const Preview = (function () {
+    const canvas = $('gl');
+    let gl = null, prog = null, buf = null, fftTex = null, locs = {}, names = [], params = [], playing = true, raf = 0, t0 = performance.now(), lastT = 0;
+    let useAudio = false, curCode = '', curNames = '', ok = false;
+    const spectrum = new Uint8Array(256);
+
+    function init() {
+      try { gl = canvas.getContext('webgl2', { alpha: false, antialias: false }); } catch (e) { gl = null; }
+      if (!gl) { setStatus($('glMsg'), 'Live preview needs WebGL2, which this browser does not offer. You can still download the Materials.', 'warn'); return false; }
+      buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      fftTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, fftTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 256, 1, 0, gl.RED, gl.UNSIGNED_BYTE, spectrum);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      return true;
+    }
+    function compile(code, pnames) {
+      const header = '#version 300 es\nprecision highp float;\nprecision highp sampler2D;\nuniform vec2 resolution;\nuniform float time;\nuniform vec4 color;\nuniform float alpha;\nuniform sampler2D fftTex;\nin vec2 texCoord;\nout vec4 fragColor;\n' +
+        pnames.map(function (n) { return 'uniform float ' + n + ';\n'; }).join('');
+      const vs = gl.createShader(gl.VERTEX_SHADER);
+      gl.shaderSource(vs, '#version 300 es\nin vec2 pos;\nout vec2 texCoord;\nvoid main() { texCoord = pos * 0.5 + 0.5; gl_Position = vec4(pos, 0.0, 1.0); }\n');
+      gl.compileShader(vs);
+      const fs = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(fs, header + code); gl.compileShader(fs);
+      if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(fs) || 'unknown error'; gl.deleteShader(vs); gl.deleteShader(fs); return { error: log }; }
+      const p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, fs); gl.bindAttribLocation(p, 0, 'pos'); gl.linkProgram(p);
+      gl.deleteShader(vs); gl.deleteShader(fs);
+      if (!gl.getProgramParameter(p, gl.LINK_STATUS)) return { error: gl.getProgramInfoLog(p) || 'link error' };
+      return { prog: p };
+    }
+    function buildKnobs() {
+      const box = $('pvKnobs'); box.innerHTML = '';
+      const real = params.filter(function (p) { return !p.temp; });
+      const head = document.createElement('p'); head.className = 'hint'; head.style.margin = '10px 0 0';
+      head.textContent = real.length ? 'The knobs you have set up (drag to try them):' : 'Knobs you set up in step 5 will appear here.';
+      box.appendChild(head);
+      params.forEach(function (p) {
+        const min = p.min === undefined ? 0 : p.min, max = p.max === undefined ? 1 : p.max;
+        const def = min + p.default * (max - min);
+        if (p.temp) { if (state.values[p.name] === undefined) state.values[p.name] = def; return; }
+        if (state.values[p.name] === undefined || state.values[p.name] < min || state.values[p.name] > max) state.values[p.name] = def;
+        const wrap = document.createElement('div'); wrap.className = 'knob';
+        const lab = document.createElement('label'); lab.setAttribute('for', 'pv_' + p.name);
+        const nm = document.createElement('span'); nm.textContent = p.name;
+        const out = document.createElement('output'); out.textContent = Number(state.values[p.name]).toFixed(3);
+        lab.appendChild(nm); lab.appendChild(out);
+        const r = document.createElement('input'); r.type = 'range'; r.id = 'pv_' + p.name; r.min = min; r.max = max; r.step = (max - min) / 400; r.value = state.values[p.name];
+        r.addEventListener('input', function () { state.values[p.name] = parseFloat(r.value); out.textContent = parseFloat(r.value).toFixed(3); });
+        wrap.appendChild(lab); wrap.appendChild(r); box.appendChild(wrap);
+      });
+    }
+    function select() {
+      if (!gl || !state.pvPlain) return;
+      const src = useAudio ? state.pvAudio : state.pvPlain;
+      params = src.params; names = params.map(function (p) { return p.name; });
+      if (src.code !== curCode) {
+        curCode = src.code;
+        const res = compile(src.code, names);
+        if (res.error) { ok = false; setStatus($('glMsg'), 'The preview could not compile this code (your browser said: ' + res.error.split('\n')[0].slice(0, 220) + '). It may still work in VS2.', 'warn'); return; }
+        if (prog) gl.deleteProgram(prog);
+        prog = res.prog; ok = true;
+        locs = { resolution: gl.getUniformLocation(prog, 'resolution'), time: gl.getUniformLocation(prog, 'time'), color: gl.getUniformLocation(prog, 'color'),
+          alpha: gl.getUniformLocation(prog, 'alpha'), fftTex: gl.getUniformLocation(prog, 'fftTex') };
+        names.forEach(function (n) { locs[n] = gl.getUniformLocation(prog, n); });
+        setStatus($('glMsg'), '', '');
+      }
+      const sigK = names.join(',');
+      if (sigK !== curNames) { curNames = sigK; buildKnobs(); }
+    }
+    function hexToRgb(h) { const v = parseInt(h.slice(1), 16); return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]; }
+    function frame(now) {
+      raf = requestAnimationFrame(frame);
+      if (!gl || !prog || !ok) return;
+      const t = (now - t0) / 1000;
+      const w = Math.min(640, Math.floor(canvas.clientWidth * (window.devicePixelRatio || 1))) || 640;
+      const h = Math.round(w * 9 / 16);
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+      if (useAudio) {
+        const beat = (t * 2) % 1, kick = Math.pow(Math.max(0, 1 - beat * 3), 2), snare = Math.pow(Math.max(0, 1 - ((t + 0.5) % 1) * 4), 2);
+        const fm = state.fftMap || { fftMin: 20, fftMax: 20000, log: true };
+        const hat = ((t * 8) % 1) < 0.3 ? 1 : 0.2;
+        const bump = function (f, centre, width) { const z = Math.log(f / centre) / Math.LN2 / width; return Math.exp(-z * z); };
+        for (let i = 0; i < 256; i++) {
+          const x = i / 255;
+          const f = fm.log ? fm.fftMin * Math.pow(fm.fftMax / fm.fftMin, x) : fm.fftMin + x * (fm.fftMax - fm.fftMin);
+          const ff = Math.max(f, 1);
+          const v = kick * 0.9 * bump(ff, 70, 1.2) + snare * 0.6 * bump(ff, 700, 1.3) + hat * (0.35 + 0.15 * Math.sin(t * 40 + i)) * bump(ff, 9000, 1.2);
+          spectrum[i] = Math.max(0, Math.min(255, Math.round(v * 255)));
+        }
+        gl.bindTexture(gl.TEXTURE_2D, fftTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RED, gl.UNSIGNED_BYTE, spectrum);
+      }
+      gl.viewport(0, 0, w, h);
+      gl.clearColor(0.05, 0.05, 0.08, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+      gl.useProgram(prog); gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.uniform2f(locs.resolution, w, h);
+      gl.uniform1f(locs.time, playing ? t : lastT);
+      const c = hexToRgb($('mColour').value); gl.uniform4f(locs.color, c[0], c[1], c[2], 1); gl.uniform1f(locs.alpha, 1);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fftTex); gl.uniform1i(locs.fftTex, 0);
+      names.forEach(function (n) { if (locs[n]) gl.uniform1f(locs[n], state.values[n]); });
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (playing) lastT = t;
+    }
+    return {
+      start: function () { if (!init()) return; raf = requestAnimationFrame(frame); },
+      set: function (s) { if (!gl) return; if (!s || !s.pvPlain) { prog = null; ok = false; return; } select(); },
+      setAudio: function (on) { useAudio = on; curCode = ''; this.set(state); },
+      toggle: function () { playing = !playing; if (playing) t0 = performance.now() - lastT * 1000; return playing; }
+    };
+  })();
+
+  // ---------- downloads and copying ----------
+  function download(name, text) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+  function copyText(text, label) {
+    const done = function () { setStatus($('outMsg'), label + ' copied to the clipboard.', 'ok'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+    else fallbackCopy(text, done);
+  }
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { setStatus($('outMsg'), 'Copying failed. Open "Show the code" and copy it by hand.', 'bad'); }
+    ta.remove();
+  }
+  function needCode() { if (!state.plain) { setStatus($('outMsg'), 'Add a shader that converts first.', 'warn'); return false; } return true; }
+
+  // ---------- wiring ----------
+  function readFile(file) {
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setStatus($('stats'), 'That file is over 2 MB, which is too big for this page.', 'bad'); return; }
+    const base = String(file.name || '').replace(/\.[^.]*$/, '');
+    if (base) $('mName').value = base.slice(0, 100);
+    const r = new FileReader();
+    r.onload = function () { $('srcText').value = String(r.result); refresh(); };
+    r.onerror = function () { setStatus($('stats'), 'The file could not be read.', 'bad'); };
+    r.readAsText(file);
+  }
+  buildKnobTable();
+  document.querySelectorAll('.setting').forEach(function (el) { el.addEventListener('input', schedule); el.addEventListener('change', schedule); });
+  $('srcText').addEventListener('input', schedule); $('commonText').addEventListener('input', schedule);
+  $('candAll').addEventListener('change', renderCandidates); $('candFilter').addEventListener('input', renderCandidates);
+  $('clearLinks').addEventListener('click', function () { state.links = {}; state.linkSig = {}; renderCandidates(); refresh(); });
+  $('resetTries').addEventListener('click', function () { state.tryOrder.slice().forEach(dropTry); renderCandidates(); refresh(); });
+  $('fileInput').addEventListener('change', function (e) { readFile(e.target.files[0]); });
+  document.querySelectorAll('.ex').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const k = b.getAttribute('data-ex');
+      $('srcText').value = EXAMPLES[k]; $('commonText').value = '';
+      state.links = {}; state.linkSig = {}; state.chanKey = ''; state.tryOrder.slice().forEach(dropTry);
+      if (k === 'bars') $('cTitle').value = 'Audio bars (example)'; else if (k === 'plasma') $('cTitle').value = 'Plasma (example)'; else $('cTitle').value = 'Rings (example)';
+      $('cAuthor').value = 'Example code, free to use'; $('cLicence').value = 'CC0 1.0';
+      refresh();
+    });
+  });
+  $('mAuthor').addEventListener('input', function () { if ($('rememberAuthor').checked) saveAuthor(); });
+  $('rememberAuthor').addEventListener('change', saveAuthor);
+  $('newUuid').addEventListener('click', function () { $('uuidP').value = uuid(); $('uuidA').value = uuid(); refresh(); });
+  $('dlPlain').addEventListener('click', function () { if (needCode()) { download(slug() + '.frag', state.plain.code); setStatus($('outMsg'), 'Downloaded ' + slug() + '.frag', 'ok'); } });
+  $('dlAudio').addEventListener('click', function () { if (needCode()) { download(slug() + '_audio.frag', state.audio.code); setStatus($('outMsg'), 'Downloaded ' + slug() + '_audio.frag', 'ok'); } });
+  $('cpPlain').addEventListener('click', function () { if (needCode()) copyText(state.plain.code, 'The plain code'); });
+  $('cpAudio').addEventListener('click', function () { if (needCode()) copyText(state.audio.code, 'The audio-reactive code'); });
+  $('pvPlay').addEventListener('click', function () { $('pvPlay').textContent = Preview.toggle() ? 'Pause' : 'Play'; });
+  $('pvAudio').addEventListener('change', function () { Preview.setAudio($('pvAudio').checked); });
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+  drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]); });
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('drop', function (e) { e.preventDefault(); if (e.target !== drop && e.dataTransfer && e.dataTransfer.files.length) readFile(e.dataTransfer.files[0]); });
+
+  // ---------- start ----------
+  $('uuidP').value = uuid(); $('uuidA').value = uuid();
+  const savedAuthor = getCookie();
+  if (savedAuthor) { $('mAuthor').value = savedAuthor; $('rememberAuthor').checked = true; }
+  $('srcText').value = EXAMPLES.plasma; $('cTitle').value = 'Plasma (example)'; $('cAuthor').value = 'Example code, free to use'; $('cLicence').value = 'CC0 1.0';
+  try { Preview.start(); } catch (e) { setStatus($('glMsg'), 'The live preview could not start. You can still download the Materials.', 'warn'); }
+  refresh();
+})();
+/* UI-END */
+</script>
+</body>
+</html>
